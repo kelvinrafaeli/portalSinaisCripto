@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #131722;
+  --background-secondary: #1e222d;
+  --background-tertiary: #2a2e39;
+  --foreground: #d1d4dc;
+  --foreground-muted: #787b86;
+  --border: #363a45;
+  --long: #26a69a;
+  --short: #ef5350;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #434651;
+}
+
+/* Animações de sinal */
+@keyframes signal-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.signal-enter {
+  animation: signal-enter 0.3s ease-out;
+}
+
+/* Glow effects */
+.glow-long {
+  box-shadow: 0 0 20px rgba(38, 166, 154, 0.3);
+}
+
+.glow-short {
+  box-shadow: 0 0 20px rgba(239, 83, 80, 0.3);
+}
+
+/* Card hover */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  background-color: var(--background-tertiary);
+  transform: translateY(-2px);
+}
+
+/* Status indicator pulsing */
+.status-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
