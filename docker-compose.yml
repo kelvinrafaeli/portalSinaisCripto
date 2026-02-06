@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -62,12 +60,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8010}
+        - NEXT_PUBLIC_WS_URL=${WS_URL:-ws://localhost:8010/ws}
     container_name: portal_sinais_frontend
     ports:
       - "3010:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8000}
-      - NEXT_PUBLIC_WS_URL=${WS_URL:-ws://localhost:8000/ws}
     depends_on:
       - backend
 

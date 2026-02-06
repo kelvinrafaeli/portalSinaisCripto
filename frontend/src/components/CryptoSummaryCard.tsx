@@ -94,10 +94,24 @@ export function CryptoSummaryCard() {
         </div>
 
         <div className="text-right">
-          <div className="text-3xl font-semibold text-foreground">
-            {summary.positive_pct.toFixed(1)}%
+          <div className="space-y-2">
+            <div>
+              <div
+                className={`font-semibold ${biasUp ? 'text-long text-3xl' : 'text-foreground-muted text-xl'}`}
+              >
+                {summary.positive_pct.toFixed(1)}%
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-foreground-muted">positivas</div>
+            </div>
+            <div>
+              <div
+                className={`font-semibold ${!biasUp ? 'text-short text-3xl' : 'text-foreground-muted text-xl'}`}
+              >
+                {summary.negative_pct.toFixed(1)}%
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-foreground-muted">negativas</div>
+            </div>
           </div>
-          <div className="text-xs text-foreground-muted">positivas</div>
         </div>
       </div>
 
