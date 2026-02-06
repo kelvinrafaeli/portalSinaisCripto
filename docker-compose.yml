@@ -41,7 +41,7 @@ services:
       dockerfile: Dockerfile
     container_name: portal_sinais_backend
     ports:
-      - "8000:8000"
+      - "8010:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-portal_sinais}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -64,7 +64,7 @@ services:
       dockerfile: Dockerfile
     container_name: portal_sinais_frontend
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${API_URL:-http://localhost:8000}
       - NEXT_PUBLIC_WS_URL=${WS_URL:-ws://localhost:8000/ws}
