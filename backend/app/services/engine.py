@@ -4,13 +4,16 @@ Motor de análise que executa as estratégias em loop assíncrono.
 """
 import asyncio
 import logging
+import os
+import json
 from typing import List, Dict, Any, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 
 from app.core.config import get_settings
 from app.services.exchange import exchange_service
 from app.services.telegram import telegram_service
+from app.services.cryptobubbles import cryptobubbles_service
 from app.strategies import (
     BaseStrategy, SignalResult,
     RSIStrategy, MACDStrategy, GCMStrategy, ComboStrategy,
@@ -18,6 +21,21 @@ from app.strategies import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Caminho para o arquivo de configuração de timeframes por estratégia
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config")
+STRATEGY_TIMEFRAMES_FILE = os.path.join(CONFIG_DIR, "strategy_timeframes.json")
+
+DEFAULT_STRATEGY_TIMEFRAMES = {
+    "GCM": ["15m", "1h", "4h"],
+    "RSI": ["5m", "15m", "1h"],
+    "MACD": ["15m", "1h", "4h"],
+    "RSI_EMA50": ["5m", "15m", "1h"],
+    "SCALPING": ["3m", "5m"],
+    "SWING_TRADE": ["1h", "4h", "1d"],
+    "DAY_TRADE": ["15m", "30m", "1h"],
+    "COMBO": ["15m", "1h", "4h"]
+}
 
 
 class SignalEngine:
@@ -28,12 +46,37 @@ class SignalEngine:
     enviando sinais via callback (WebSocket).
     """
     
+    # Mapeamento de timeframes para segundos
+    TIMEFRAME_SECONDS = {
+        "1m": 60,
+        "3m": 180,
+        "5m": 300,
+        "15m": 900,
+        "30m": 1800,
+        "1h": 3600,
+        "2h": 7200,
+        "4h": 14400,
+        "6h": 21600,
+        "8h": 28800,
+        "12h": 43200,
+        "1d": 86400,
+        "3d": 259200,
+        "1w": 604800,
+    }
+    
     def __init__(self):
         self.settings = get_settings()
         self.strategies: Dict[str, BaseStrategy] = {}
         self.is_running = False
         self._task: Optional[asyncio.Task] = None
         self._signal_callbacks: List[Callable] = []
+        
+        # Timeframes por estratégia (configurável)
+        self.strategy_timeframes: Dict[str, List[str]] = {}
+        
+        # Cache de sinais enviados: chave = "symbol_timeframe_strategy_direction" -> candle_start_timestamp
+        # Evita enviar o mesmo sinal múltiplas vezes dentro da mesma vela
+        self._sent_signals_cache: Dict[str, int] = {}
         
         # Inicializar estratégias padrão
         self._init_default_strategies()
@@ -95,6 +138,23 @@ class SignalEngine:
                 settings.telegram_bot_token,
                 settings.telegram_chat_id
             )
+        
+        # Carregar timeframes por estratégia do arquivo de configuração
+        self._load_strategy_timeframes()
+    
+    def _load_strategy_timeframes(self):
+        """Carrega os timeframes por estratégia do arquivo de configuração"""
+        try:
+            if os.path.exists(STRATEGY_TIMEFRAMES_FILE):
+                with open(STRATEGY_TIMEFRAMES_FILE, 'r') as f:
+                    self.strategy_timeframes = json.load(f)
+                    logger.info(f"Loaded strategy timeframes from {STRATEGY_TIMEFRAMES_FILE}")
+            else:
+                self.strategy_timeframes = DEFAULT_STRATEGY_TIMEFRAMES.copy()
+                logger.info("Using default strategy timeframes")
+        except Exception as e:
+            logger.error(f"Error loading strategy timeframes: {e}")
+            self.strategy_timeframes = DEFAULT_STRATEGY_TIMEFRAMES.copy()
     
     def update_strategies(self, config: Dict[str, Any]):
         """
@@ -123,6 +183,26 @@ class SignalEngine:
         
         logger.info("Strategies updated with new configuration")
     
+    def update_strategy_timeframes(self, strategy_timeframes: Dict[str, List[str]]):
+        """
+        Atualiza os timeframes específicos por estratégia.
+        
+        Args:
+            strategy_timeframes: Dict mapeando estratégia para lista de timeframes
+                Ex: {"GCM": ["15m", "1h"], "SCALPING": ["3m", "5m"]}
+        """
+        self.strategy_timeframes = strategy_timeframes
+        logger.info(f"Strategy timeframes updated: {strategy_timeframes}")
+    
+    def get_timeframes_for_strategy(self, strategy_name: str) -> List[str]:
+        """
+        Retorna os timeframes configurados para uma estratégia específica.
+        Se não configurado, retorna os timeframes padrão do settings.
+        """
+        if strategy_name in self.strategy_timeframes:
+            return self.strategy_timeframes[strategy_name]
+        return self.settings.timeframes_list
+    
     def add_signal_callback(self, callback: Callable):
         """Adiciona callback para receber sinais"""
         self._signal_callbacks.append(callback)
@@ -132,9 +212,85 @@ class SignalEngine:
         if callback in self._signal_callbacks:
             self._signal_callbacks.remove(callback)
     
+    def _get_candle_start_timestamp(self, timeframe: str) -> int:
+        """
+        Calcula o timestamp de início da vela atual baseado no timeframe.
+        
+        Por exemplo, se for 14:37 e o timeframe for 1h, retorna timestamp de 14:00.
+        Se for 14:37 e timeframe for 15m, retorna timestamp de 14:30.
+        
+        Returns:
+            Timestamp em segundos do início da vela atual
+        """
+        now = datetime.now(timezone.utc)
+        current_timestamp = int(now.timestamp())
+        
+        # Obter duração do timeframe em segundos
+        tf_seconds = self.TIMEFRAME_SECONDS.get(timeframe, 3600)  # default 1h
+        
+        # Calcular o início da vela atual (arredondar para baixo)
+        candle_start = (current_timestamp // tf_seconds) * tf_seconds
+        
+        return candle_start
+    
+    def _get_signal_cache_key(self, signal: SignalResult) -> str:
+        """
+        Gera chave única para o cache de sinais.
+        
+        Formato: symbol_timeframe_strategy_direction
+        """
+        return f"{signal.symbol}_{signal.timeframe}_{signal.strategy}_{signal.direction}"
+    
+    def _should_send_signal(self, signal: SignalResult) -> bool:
+        """
+        Verifica se o sinal deve ser enviado ou se já foi enviado nesta vela.
+        
+        Um sinal só é enviado uma vez por vela. Se o sinal persistir na próxima
+        vela, será enviado novamente.
+        
+        Returns:
+            True se deve enviar, False se já foi enviado nesta vela
+        """
+        cache_key = self._get_signal_cache_key(signal)
+        current_candle_start = self._get_candle_start_timestamp(signal.timeframe)
+        
+        # Verificar se já enviamos este sinal nesta vela
+        if cache_key in self._sent_signals_cache:
+            last_sent_candle = self._sent_signals_cache[cache_key]
+            if last_sent_candle == current_candle_start:
+                logger.debug(f"Signal already sent for this candle: {cache_key}")
+                return False
+        
+        # Atualizar cache com o timestamp da vela atual
+        self._sent_signals_cache[cache_key] = current_candle_start
+        logger.info(f"New signal will be sent: {cache_key} (candle: {datetime.fromtimestamp(current_candle_start, tz=timezone.utc)})")
+        
+        # Limpar cache antigo (sinais de velas anteriores que não são mais necessários)
+        self._cleanup_signal_cache()
+        
+        return True
+    
+    def _cleanup_signal_cache(self):
+        """
+        Remove entradas antigas do cache de sinais para evitar uso excessivo de memória.
+        Remove sinais de velas que passaram há mais de 2 períodos do maior timeframe (1 semana).
+        """
+        cutoff_time = int(datetime.now(timezone.utc).timestamp()) - (2 * 604800)  # 2 semanas
+        
+        keys_to_remove = [
+            key for key, timestamp in self._sent_signals_cache.items()
+            if timestamp < cutoff_time
+        ]
+        
+        for key in keys_to_remove:
+            del self._sent_signals_cache[key]
+        
+        if keys_to_remove:
+            logger.debug(f"Cleaned up {len(keys_to_remove)} old signal cache entries")
+    
     async def _emit_signal(self, signal: SignalResult):
         """Emite sinal para todos os callbacks registrados e Telegram"""
-        # Enviar para callbacks (WebSocket)
+        # Enviar para callbacks (WebSocket) - sempre envia para atualizar UI em tempo real
         for callback in self._signal_callbacks:
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -143,6 +299,11 @@ class SignalEngine:
                     callback(signal)
             except Exception as e:
                 logger.error(f"Error in signal callback: {e}")
+        
+        # Verificar se deve enviar para o Telegram (evita duplicados na mesma vela)
+        if not self._should_send_signal(signal):
+            logger.debug(f"Skipping Telegram notification - signal already sent for this candle")
+            return
         
         # Enviar para Telegram
         if telegram_service.is_enabled:
@@ -197,11 +358,29 @@ class SignalEngine:
         """
         Executa um ciclo completo de análise.
         
+        Se use_cryptobubbles estiver habilitado e symbols não for fornecido,
+        busca automaticamente os top N pares com maior variação em 24h.
+        
         Returns:
             Lista de todos os sinais gerados no ciclo
         """
+        # Determinar símbolos a analisar
         if symbols is None:
-            symbols = self.settings.symbols_list
+            if self.settings.use_cryptobubbles:
+                # Buscar símbolos do CryptoBubbles
+                symbols = await cryptobubbles_service.get_top_volatile_symbols(
+                    limit=self.settings.cryptobubbles_top_limit,
+                    exclude_stablecoins=self.settings.cryptobubbles_exclude_stablecoins,
+                    min_volume=self.settings.cryptobubbles_min_volume
+                )
+                logger.info(f"Using {len(symbols)} symbols from CryptoBubbles (top volatile)")
+                
+                # Fallback para settings se CryptoBubbles falhar
+                if not symbols:
+                    logger.warning("CryptoBubbles returned no symbols, using fallback from settings")
+                    symbols = self.settings.symbols_list
+            else:
+                symbols = self.settings.symbols_list
         if timeframes is None:
             timeframes = self.settings.timeframes_list
         if active_strategies is None:
@@ -209,8 +388,23 @@ class SignalEngine:
         
         all_signals = []
         
-        for timeframe in timeframes:
+        # Coletar todos os timeframes necessários (união de todos os timeframes por estratégia)
+        required_timeframes = set(timeframes)
+        for strategy in active_strategies:
+            strategy_tfs = self.get_timeframes_for_strategy(strategy)
+            required_timeframes.update(strategy_tfs)
+        
+        for timeframe in required_timeframes:
             logger.info(f"Analyzing {len(symbols)} symbols on {timeframe}...")
+            
+            # Quais estratégias usar neste timeframe
+            strategies_for_tf = [
+                s for s in active_strategies 
+                if timeframe in self.get_timeframes_for_strategy(s)
+            ]
+            
+            if not strategies_for_tf:
+                continue
             
             # Buscar dados para todos os símbolos
             data = await exchange_service.fetch_multiple_ohlcv(
@@ -224,7 +418,7 @@ class SignalEngine:
                     continue
                 
                 signals = await self.analyze_symbol(
-                    symbol, timeframe, df, active_strategies
+                    symbol, timeframe, df, strategies_for_tf
                 )
                 
                 for signal in signals:
@@ -278,6 +472,7 @@ class SignalEngine:
                 pass
         
         await exchange_service.close()
+        await cryptobubbles_service.close()
         logger.info("Signal Engine stopped")
     
     @property
@@ -288,7 +483,10 @@ class SignalEngine:
             "strategies": list(self.strategies.keys()),
             "symbols_count": len(self.settings.symbols_list),
             "timeframes": self.settings.timeframes_list,
-            "interval_seconds": self.settings.worker_interval_seconds
+            "strategy_timeframes": self.strategy_timeframes,
+            "interval_seconds": self.settings.worker_interval_seconds,
+            "use_cryptobubbles": self.settings.use_cryptobubbles,
+            "cryptobubbles_limit": self.settings.cryptobubbles_top_limit
         }
 
 

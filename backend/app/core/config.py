@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     binance_secret: str = ""
     
     # Strategy Settings (como JSON strings no .env)
-    active_strategies: str = '["GCM", "COMBO", "MACD", "RSI"]'
-    timeframes: str = '["5m", "15m", "1h", "4h"]'
-    symbols: str = '["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT"]'
+    active_strategies: str = '["GCM", "RSI", "MACD", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE"]'
+    timeframes: str = '["3m", "5m", "15m", "1h", "4h"]'
+    symbols: str = '["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", "MATICUSDT", "LTCUSDT"]'
     
     # RSI
     rsi_period: int = 14
@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     # Worker
     chunk_size: int = 200
     worker_interval_seconds: int = 60
+    
+    # CryptoBubbles
+    use_cryptobubbles: bool = True  # Usar CryptoBubbles para capturar pares dinâmicos
+    cryptobubbles_top_limit: int = 100  # Quantidade de pares com maior variação
+    cryptobubbles_exclude_stablecoins: bool = True
+    cryptobubbles_min_volume: float = 0  # Volume mínimo em USD
     
     @property
     def strategies_list(self) -> List[str]:

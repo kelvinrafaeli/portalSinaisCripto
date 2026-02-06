@@ -1,6 +1,7 @@
 """
 Portal Sinais - Exchange Service
 Conecta em exchanges usando ccxt para buscar dados de mercado.
+Com fallback para requisições diretas via DNS alternativo para contornar problemas de DNS.
 """
 import ccxt
 import ccxt.async_support as ccxt_async
@@ -9,10 +10,91 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import asyncio
 import logging
+import aiohttp
+import socket
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# DNS alternativo (Google, Cloudflare)
+ALTERNATIVE_DNS = [
+    ("8.8.8.8", 53),
+    ("1.1.1.1", 53),
+]
+
+async def resolve_with_custom_dns(hostname: str) -> Optional[str]:
+    """Resolve hostname usando DNS alternativo"""
+    import struct
+    
+    # Constrói query DNS simples
+    def build_dns_query(domain):
+        transaction_id = b'\xAA\xBB'
+        flags = b'\x01\x00'  # Standard query
+        qdcount = b'\x00\x01'
+        ancount = b'\x00\x00'
+        nscount = b'\x00\x00'
+        arcount = b'\x00\x00'
+        
+        header = transaction_id + flags + qdcount + ancount + nscount + arcount
+        
+        # Question section
+        question = b''
+        for part in domain.split('.'):
+            question += bytes([len(part)]) + part.encode()
+        question += b'\x00'  # End of domain
+        question += b'\x00\x01'  # Type A
+        question += b'\x00\x01'  # Class IN
+        
+        return header + question
+    
+    for dns_server, port in ALTERNATIVE_DNS:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(3)
+            
+            query = build_dns_query(hostname)
+            sock.sendto(query, (dns_server, port))
+            
+            response, _ = sock.recvfrom(512)
+            sock.close()
+            
+            # Parse response - skip header (12 bytes) and question
+            offset = 12
+            while response[offset] != 0:
+                offset += 1 + response[offset]
+            offset += 5  # Skip null byte and QTYPE/QCLASS
+            
+            # Read answers
+            while offset < len(response):
+                # Skip name pointer or name
+                if response[offset] & 0xC0 == 0xC0:
+                    offset += 2
+                else:
+                    while response[offset] != 0:
+                        offset += 1 + response[offset]
+                    offset += 1
+                
+                if offset + 10 > len(response):
+                    break
+                    
+                rtype = struct.unpack('>H', response[offset:offset+2])[0]
+                offset += 8  # Skip type, class, ttl
+                rdlength = struct.unpack('>H', response[offset:offset+2])[0]
+                offset += 2
+                
+                if rtype == 1 and rdlength == 4:  # Type A, IPv4
+                    ip = '.'.join(str(b) for b in response[offset:offset+4])
+                    logger.info(f"Resolved {hostname} to {ip} via {dns_server}")
+                    return ip
+                
+                offset += rdlength
+                
+        except Exception as e:
+            logger.warning(f"DNS resolution via {dns_server} failed: {e}")
+            continue
+    
+    return None
 
 
 class ExchangeService:
@@ -94,6 +176,7 @@ class ExchangeService:
             # BTCUSDT -> BTC/USDT
             symbol = self._convert_symbol(symbol)
         
+        # Primeiro tenta via ccxt
         try:
             exchange = await self._get_async_exchange()
             tf = self.TIMEFRAME_MAPPING.get(timeframe, timeframe)
@@ -115,7 +198,81 @@ class ExchangeService:
             return df
             
         except Exception as e:
-            logger.error(f"Error fetching OHLCV for {symbol}: {e}")
+            logger.warning(f"CCXT failed for {symbol}, trying direct IP fallback: {e}")
+            
+            # Fallback: requisição direta para Binance via IP
+            return await self._fetch_ohlcv_direct(symbol, timeframe, limit)
+    
+    async def _fetch_ohlcv_direct(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        limit: int = 200
+    ) -> pd.DataFrame:
+        """
+        Fallback: busca dados diretamente da Binance via DNS alternativo.
+        """
+        # Converter símbolo: BTC/USDT -> BTCUSDT
+        binance_symbol = symbol.replace("/", "")
+        tf = self.TIMEFRAME_MAPPING.get(timeframe, timeframe)
+        
+        # Resolve IP via DNS alternativo
+        resolved_ip = await resolve_with_custom_dns("api.binance.com")
+        
+        if not resolved_ip:
+            logger.error(f"Could not resolve api.binance.com via alternative DNS")
+            return pd.DataFrame()
+        
+        try:
+            url = f"https://api.binance.com/api/v3/klines"
+            params = {
+                "symbol": binance_symbol,
+                "interval": tf,
+                "limit": limit
+            }
+            
+            # Criar connector com IP resolvido
+            connector = aiohttp.TCPConnector(
+                resolver=aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "1.1.1.1"])
+            )
+            
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.get(url, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if not data:
+                            return pd.DataFrame()
+                        
+                        # Binance retorna: [open_time, open, high, low, close, volume, ...]
+                        ohlcv = [
+                            [
+                                candle[0],  # timestamp
+                                float(candle[1]),  # open
+                                float(candle[2]),  # high
+                                float(candle[3]),  # low
+                                float(candle[4]),  # close
+                                float(candle[5])   # volume
+                            ]
+                            for candle in data
+                        ]
+                        
+                        df = pd.DataFrame(
+                            ohlcv,
+                            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
+                        )
+                        
+                        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                        df = df.set_index('timestamp')
+                        
+                        logger.info(f"Successfully fetched {symbol} via alternative DNS")
+                        return df
+                    else:
+                        logger.warning(f"Binance API returned status {response.status}")
+                        return pd.DataFrame()
+                        
+        except Exception as e:
+            logger.error(f"Direct fetch failed for {symbol}: {e}")
             return pd.DataFrame()
     
     async def fetch_multiple_ohlcv(

@@ -4,9 +4,14 @@ Envia sinais formatados para grupos do Telegram.
 """
 import asyncio
 import aiohttp
+from aiohttp import TCPConnector
 import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
+import socket
+import json
+import os
+from pathlib import Path
 
 from app.strategies.base import SignalResult
 
@@ -18,6 +23,13 @@ DISCLAIMER = """
 Isso NÃO é uma recomendação de investimento.
 Faça sua própria análise antes de operar.
 """
+
+# IP fixo do Telegram API (para bypass de DNS)
+TELEGRAM_API_IPS = ["149.154.167.220", "149.154.166.110"]
+
+# Arquivo de configuração
+CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+CONFIG_FILE = CONFIG_DIR / "telegram_config.json"
 
 
 class TelegramService:
@@ -31,12 +43,48 @@ class TelegramService:
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self._enabled = bool(bot_token and chat_id)
         
+        # Tentar carregar configuração salva
+        self._load_config()
+        
+    def _load_config(self):
+        """Carrega configuração do arquivo"""
+        try:
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+                    self.bot_token = config.get('bot_token', '')
+                    self.chat_id = config.get('chat_id', '')
+                    self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
+                    self._enabled = bool(self.bot_token and self.chat_id)
+                    if self._enabled:
+                        logger.info("Telegram configuration loaded from file")
+        except Exception as e:
+            logger.warning(f"Could not load Telegram config: {e}")
+    
+    def _save_config(self):
+        """Salva configuração em arquivo"""
+        try:
+            # Criar diretório se não existir
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump({
+                    'bot_token': self.bot_token,
+                    'chat_id': self.chat_id
+                }, f, indent=2)
+            logger.info("Telegram configuration saved to file")
+        except Exception as e:
+            logger.error(f"Could not save Telegram config: {e}")
+        
     def configure(self, bot_token: str, chat_id: str):
         """Configura credenciais do Telegram"""
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self._enabled = bool(bot_token and chat_id)
+        
+        # Salvar configuração em arquivo
+        self._save_config()
         
     @property
     def is_enabled(self) -> bool:
@@ -52,107 +100,71 @@ class TelegramService:
         direction = signal.direction
         
         # Emoji baseado na direção
-        emoji = "🟢" if direction == "LONG" else "🔴"
-        direction_text = "virou positivo" if direction == "LONG" else "virou negativo"
+        direction_emoji = "⬆️" if direction == "LONG" else "⬇️"
         signal_text = "LONG" if direction == "LONG" else "SHORT"
         
-        # Header padrão
-        header = "🏆 GRUPO CRIPTO JFN - TELEGRAM"
-        
         # Formatação específica por estratégia
-        if strategy == "GCM":
-            return f"""———————————————
-{header}
+        if strategy == "RSI":
+            # Valor do RSI
+            rsi_value = f"{signal.rsi:.2f}" if signal.rsi else "N/A"
+            return f"""🚨 INDICADOR RSI 🚨
 
-INDICADOR: GCM
-
-MOEDA: {symbol}
-
-TEMPO GRÁFICO: {timeframe.upper()}
-CRUZAMENTO:  {emoji}
-{direction_text}
-———————————————"""
-
-        elif strategy == "RSI":
-            return f"""———————————————
-{header}
-
-INDICADOR: RSI
-
-MOEDA: {symbol}
-
-TEMPO GRÁFICO: {timeframe.upper()}
-CRUZAMENTO:  {emoji}
-{direction_text}
-———————————————"""
+Ativo: {symbol}
+RSI: {rsi_value}
+Tempo gráfico: {timeframe}"""
 
         elif strategy == "MACD":
-            return f"""———————————————
-{header}
+            return f"""🔀 CRUZAMENTO MACD 🔀
 
-INDICADOR: MACD
-
-MOEDA: {symbol}
-
-TEMPO GRÁFICO: {timeframe.upper()}
-CRUZAMENTO:  {emoji}
-{direction_text}
-———————————————"""
+{symbol}
+MACD CRUZOU {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
         elif strategy == "RSI_EMA50":
-            return f"""———————————————
-{header}
+            # Valor do RSI
+            rsi_value = f"{signal.rsi:.2f}" if signal.rsi else "N/A"
+            return f"""📊 RSI + EMA50 📊
 
-INDICADORES: RSI + EMA50 
+Ativo: {symbol}
+RSI: {rsi_value}
+MACD CRUZOU {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
-TEMPO GRÁFICO: {timeframe.upper()}
+        elif strategy == "GCM":
+            return f"""🏆 INDICADOR GCM 🏆
 
-MOEDA: {symbol}
-SINAL:  {signal_text}   {emoji}
-———————————————"""
+Ativo: {symbol}
+Sinal: {signal_text} {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
         elif strategy == "SCALPING":
-            return f"""———————————————
-{header}
+            return f"""⚡ SCALPING ⚡
 
-TIPO DE OPERAÇÃO: SCALPING
-
-MOEDA: {symbol}
-SINAL: {signal_text}   {emoji}
-———————————————"""
+Ativo: {symbol}
+Sinal: {signal_text} {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
         elif strategy == "SWING_TRADE" or strategy == "GCM_PRO":
-            return f"""———————————————
-{header}
+            return f"""📈 SWING TRADE 📈
 
-TIPO DE OPERAÇÃO: SWING TRADE
-
-MOEDA: {symbol}
-SINAL: {signal_text}   {emoji}
-———————————————"""
+Ativo: {symbol}
+Sinal: {signal_text} {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
         elif strategy == "DAY_TRADE" or strategy == "COMBO":
-            return f"""———————————————
-{header}
+            return f"""💹 DAY TRADE 💹
 
-TIPO DE OPERAÇÃO: DAY TRADE
-
-MOEDA: {symbol}
-SINAL: {signal_text}   {emoji}
-———————————————"""
+Ativo: {symbol}
+Sinal: {signal_text} {direction_emoji}
+Tempo gráfico: {timeframe}"""
 
         else:
             # Formato genérico
-            return f"""———————————————
-{header}
+            return f"""📢 {strategy} 📢
 
-INDICADOR: {strategy}
-
-MOEDA: {symbol}
-
-TEMPO GRÁFICO: {timeframe.upper()}
-SINAL: {signal_text}   {emoji}
-———————————————"""
+Ativo: {symbol}
+Sinal: {signal_text} {direction_emoji}
+Tempo gráfico: {timeframe}"""
     
     async def send_message(
         self, 
@@ -181,23 +193,43 @@ SINAL: {signal_text}   {emoji}
             "parse_mode": parse_mode
         }
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{self.base_url}/sendMessage",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    if response.status == 200:
-                        logger.info(f"Mensagem enviada ao Telegram: {target_chat}")
-                        return True
-                    else:
-                        error = await response.text()
-                        logger.error(f"Erro ao enviar ao Telegram: {error}")
-                        return False
-        except Exception as e:
-            logger.error(f"Exceção ao enviar ao Telegram: {e}")
-            return False
+        # Tentar primeiro com DNS normal, depois com IP direto
+        urls_to_try = [
+            f"{self.base_url}/sendMessage",
+        ]
+        
+        # Adicionar URLs com IP direto como fallback
+        for ip in TELEGRAM_API_IPS:
+            urls_to_try.append(f"https://{ip}/bot{self.bot_token}/sendMessage")
+        
+        last_error = None
+        for url in urls_to_try:
+            try:
+                # Usar connector com SSL flexível para IP direto
+                connector = TCPConnector(ssl=False) if url.startswith("https://149") else None
+                
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    headers = {"Host": "api.telegram.org"} if url.startswith("https://149") else {}
+                    async with session.post(
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as response:
+                        if response.status == 200:
+                            logger.info(f"Mensagem enviada ao Telegram: {target_chat}")
+                            return True
+                        else:
+                            error = await response.text()
+                            logger.error(f"Erro ao enviar ao Telegram: {error}")
+                            last_error = error
+            except Exception as e:
+                logger.warning(f"Falha ao enviar via {url[:50]}...: {e}")
+                last_error = str(e)
+                continue
+        
+        logger.error(f"Todas as tentativas falharam. Último erro: {last_error}")
+        return False
     
     async def send_signal(
         self, 

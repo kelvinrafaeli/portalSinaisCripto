@@ -20,7 +20,19 @@ const STRATEGY_INFO: Record<string, { type: string; label: string; color: string
 
 export function SignalCard({ signal }: SignalCardProps) {
   const isLong = signal.direction === 'LONG';
-  const time = new Date(signal.timestamp).toLocaleTimeString('pt-BR');
+  const signalDate = new Date(signal.timestamp);
+  
+  // Formatar hora - o timestamp já vem em horário de São Paulo do backend
+  const time = signalDate.toLocaleTimeString('pt-BR', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  const date = signalDate.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit'
+  });
   const stratInfo = STRATEGY_INFO[signal.strategy] || { 
     type: 'INDICADOR', 
     label: signal.strategy, 
@@ -35,13 +47,18 @@ export function SignalCard({ signal }: SignalCardProps) {
         : 'border-short/30 bg-short/5 glow-short'
       }
     `}>
-      {/* Header com tipo de operação */}
+      {/* Header com tipo de operação e indicador */}
       <div className="flex items-center justify-between mb-2">
-        <span className={`text-xs font-medium px-2 py-0.5 rounded ${stratInfo.color}`}>
-          {stratInfo.type}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium px-2 py-0.5 rounded ${stratInfo.color}`}>
+            {stratInfo.type}
+          </span>
+          <span className="text-xs font-bold text-foreground">
+            📊 {stratInfo.label}
+          </span>
+        </div>
         <span className="text-xs text-foreground-muted">
-          {time}
+          {date} {time}
         </span>
       </div>
       

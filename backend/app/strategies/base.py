@@ -4,9 +4,13 @@ Portal Sinais - Classe Base de Estratégia
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
+
+# Timezone de São Paulo (UTC-3)
+import zoneinfo
+SAO_PAULO_TZ = zoneinfo.ZoneInfo("America/Sao_Paulo")
 
 
 @dataclass
@@ -31,7 +35,8 @@ class SignalResult:
     
     def __post_init__(self):
         if self.timestamp is None:
-            self.timestamp = datetime.utcnow()
+            # Usar horário de São Paulo
+            self.timestamp = datetime.now(SAO_PAULO_TZ)
     
     def to_dict(self) -> Dict[str, Any]:
         return {

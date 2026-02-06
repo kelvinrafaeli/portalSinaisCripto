@@ -26,9 +26,29 @@ class TestMessage(BaseModel):
 @router.get("/status")
 async def get_telegram_status():
     """Retorna status da integração Telegram"""
+    # Mascarar token e chat_id para segurança
+    masked_token = ""
+    masked_chat = ""
+    
+    if telegram_service.bot_token:
+        token = telegram_service.bot_token
+        if len(token) > 10:
+            masked_token = token[:5] + "..." + token[-4:]
+        else:
+            masked_token = "****"
+            
+    if telegram_service.chat_id:
+        chat = telegram_service.chat_id
+        if len(chat) > 6:
+            masked_chat = chat[:4] + "..." + chat[-3:]
+        else:
+            masked_chat = chat
+    
     return {
         "enabled": telegram_service.is_enabled,
-        "configured": bool(telegram_service.bot_token and telegram_service.chat_id)
+        "configured": bool(telegram_service.bot_token and telegram_service.chat_id),
+        "masked_token": masked_token,
+        "masked_chat_id": masked_chat
     }
 
 
@@ -64,17 +84,29 @@ async def test_telegram(test: TestMessage = None):
     message = test.message if test else "🚀 Portal Sinais - Teste de conexão!"
     include_disclaimer = test.include_disclaimer if test else True
     
-    success = await telegram_service.send_message(
-        message,
-        include_disclaimer=include_disclaimer
-    )
-    
-    if success:
-        return {"status": "sent", "message": message}
-    else:
+    try:
+        success = await telegram_service.send_message(
+            message,
+            include_disclaimer=include_disclaimer
+        )
+        
+        if success:
+            return {"status": "sent", "message": message}
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Falha ao enviar mensagem. Verifique o token e chat_id."
+            )
+    except Exception as e:
+        error_msg = str(e)
+        if "DNS" in error_msg or "connect" in error_msg.lower():
+            raise HTTPException(
+                status_code=503,
+                detail="Erro de conexão: não foi possível conectar ao Telegram. Verifique sua conexão de internet/DNS."
+            )
         raise HTTPException(
             status_code=500,
-            detail="Falha ao enviar mensagem. Verifique o token e chat_id."
+            detail=f"Erro ao enviar: {error_msg}"
         )
 
 

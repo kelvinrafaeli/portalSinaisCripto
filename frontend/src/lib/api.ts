@@ -112,10 +112,79 @@ class ApiClient {
     return this.request<{ running: boolean }>('/engine/status');
   }
 
+  // Telegram endpoints
+  async getTelegramStatus() {
+    return this.request<{ enabled: boolean; configured: boolean; masked_token?: string; masked_chat_id?: string }>('/telegram/status');
+  }
+
+  async configureTelegram(botToken: string, chatId: string) {
+    return this.request('/telegram/configure', {
+      method: 'POST',
+      body: JSON.stringify({ bot_token: botToken, chat_id: chatId }),
+    });
+  }
+
+  async testTelegram(message?: string) {
+    return this.request('/telegram/test', {
+      method: 'POST',
+      body: JSON.stringify({ message: message || '🚀 Portal Sinais - Teste de conexão!', include_disclaimer: false }),
+    });
+  }
+
+  // Strategy timeframes configuration
+  async updateStrategyTimeframes(timeframes: Record<string, string[]>) {
+    return this.request('/config/strategy-timeframes', {
+      method: 'PUT',
+      body: JSON.stringify({ strategy_timeframes: timeframes }),
+    });
+  }
+
+  async getStrategyTimeframes() {
+    return this.request<Record<string, string[]>>('/config/strategy-timeframes');
+  }
+
   // Health check
   async healthCheck() {
     const response = await fetch(`${this.baseUrl}/health`);
     return response.json();
+  }
+
+  // CryptoBubbles endpoints
+  async getCryptoBubblesSummary() {
+    return this.request<{
+      status: string;
+      total_coins: number;
+      tradeable_on_binance: number;
+      cache_time: string | null;
+      top_5_gainers: Array<{ symbol: string; change: number }>;
+      top_5_losers: Array<{ symbol: string; change: number }>;
+    }>('/cryptobubbles/summary');
+  }
+
+  async getActivePairs(forceRefresh: boolean = false) {
+    return this.request<{
+      source: string;
+      count: number;
+      limit?: number;
+      pairs: Array<{
+        symbol: string;
+        name: string;
+        binance_symbol: string;
+        rank?: number;
+        price?: number;
+        volume?: number;
+        marketcap?: number;
+        change_1h?: number;
+        change_24h?: number;
+        change_7d?: number;
+      }>;
+    }>(`/cryptobubbles/active-pairs?force_refresh=${forceRefresh}`);
+  }
+
+  async getTopVolatile(limit: number = 100) {
+    return this.request<{ count: number; symbols: string[] }>(
+      `/cryptobubbles/top-volatile?limit=${limit}`
+    );
   }
 }
 

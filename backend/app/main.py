@@ -31,7 +31,12 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 50)
     logger.info("🚀 Portal Sinais - Starting...")
     logger.info(f"📊 Strategies: {settings.strategies_list}")
-    logger.info(f"💹 Symbols: {len(settings.symbols_list)} configured")
+    
+    if settings.use_cryptobubbles:
+        logger.info(f"🔥 CryptoBubbles: ENABLED (top {settings.cryptobubbles_top_limit} volatile pairs)")
+    else:
+        logger.info(f"💹 Symbols: {len(settings.symbols_list)} configured (static)")
+    
     logger.info(f"⏱️  Timeframes: {settings.timeframes_list}")
     logger.info(f"🔄 Worker interval: {settings.worker_interval_seconds}s")
     logger.info("=" * 50)

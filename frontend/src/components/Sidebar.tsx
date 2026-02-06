@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSignalStore } from '@/lib/store';
 import { api } from '@/lib/api';
+import { TelegramConfig } from './TelegramConfig';
 
 // Estratégias disponíveis com seus nomes de exibição
 const STRATEGIES = [
@@ -14,7 +15,18 @@ const STRATEGIES = [
   { id: 'SWING_TRADE', label: 'Swing Trade', description: 'Operações longas' },
   { id: 'DAY_TRADE', label: 'Day Trade', description: 'MACD + RSI juntos' },
 ];
-const TIMEFRAMES = ['3m', '15m', '1h', '4h', '1d'];
+const TIMEFRAMES = ['3m', '5m', '15m', '30m', '1h', '4h', '1d'];
+
+// Timeframes padrão por estratégia
+const DEFAULT_STRATEGY_TIMEFRAMES: Record<string, string[]> = {
+  'GCM': ['15m', '1h', '4h'],
+  'RSI': ['15m', '1h', '4h'],
+  'MACD': ['15m', '1h', '4h'],
+  'RSI_EMA50': ['1h', '4h'],
+  'SCALPING': ['3m', '5m'],
+  'SWING_TRADE': ['4h', '1d'],
+  'DAY_TRADE': ['15m', '1h'],
+};
 
 export function Sidebar() {
   const [rsiPeriod, setRsiPeriod] = useState(14);
@@ -25,7 +37,10 @@ export function Sidebar() {
   const [harsiLen, setHarsiLen] = useState(10);
   const [harsiSmooth, setHarsiSmooth] = useState(5);
   
-  const [activeStrategies, setActiveStrategies] = useState<string[]>(STRATEGIES);
+  const [activeStrategies, setActiveStrategies] = useState<string[]>(STRATEGIES.map(s => s.id));
+  const [strategyTimeframes, setStrategyTimeframes] = useState<Record<string, string[]>>(DEFAULT_STRATEGY_TIMEFRAMES);
+  const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
+  
   const engineRunning = useSignalStore((state) => state.engineRunning);
   const setEngineRunning = useSignalStore((state) => state.setEngineRunning);
 
@@ -48,6 +63,9 @@ export function Sidebar() {
       if (config.strategies?.active) {
         setActiveStrategies(config.strategies.active);
       }
+      if (config.strategies?.timeframes) {
+        setStrategyTimeframes(config.strategies.timeframes);
+      }
     }).catch(console.error);
 
     // Verificar status do engine
@@ -62,6 +80,28 @@ export function Sidebar() {
         ? prev.filter((s) => s !== stratId)
         : [...prev, stratId]
     );
+  };
+
+  const toggleStrategyTimeframe = (stratId: string, timeframe: string) => {
+    setStrategyTimeframes((prev) => {
+      const current = prev[stratId] || [];
+      const updated = current.includes(timeframe)
+        ? current.filter((t) => t !== timeframe)
+        : [...current, timeframe];
+      
+      const newConfig = { ...prev, [stratId]: updated };
+      
+      // Salvar no backend
+      api.updateStrategyTimeframes(newConfig).catch(console.error);
+      
+      return newConfig;
+    });
+  };
+
+  const handleStrategyClick = (stratId: string, e: React.MouseEvent) => {
+    // Prevenir toggle do checkbox quando clicar para expandir
+    e.stopPropagation();
+    setExpandedStrategy(expandedStrategy === stratId ? null : stratId);
   };
 
   const handleToggleEngine = async () => {
@@ -109,23 +149,67 @@ export function Sidebar() {
         {/* Estratégias */}
         <div className="mb-6">
           <h3 className="text-sm font-semibold text-foreground mb-3">Estratégias</h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {STRATEGIES.map((strat) => (
-              <label
-                key={strat.id}
-                className="flex items-center gap-3 p-2 rounded hover:bg-background-tertiary cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={activeStrategies.includes(strat.id)}
-                  onChange={() => toggleStrategy(strat.id)}
-                  className="w-4 h-4 rounded border-border bg-background accent-long"
-                />
-                <div className="flex flex-col">
-                  <span className="text-sm text-foreground">{strat.label}</span>
-                  <span className="text-xs text-foreground-muted">{strat.description}</span>
+              <div key={strat.id} className="rounded overflow-hidden">
+                {/* Header da estratégia */}
+                <div className="flex items-center gap-2 p-2 hover:bg-background-tertiary">
+                  <input
+                    type="checkbox"
+                    checked={activeStrategies.includes(strat.id)}
+                    onChange={() => toggleStrategy(strat.id)}
+                    className="w-4 h-4 rounded border-border bg-background accent-long"
+                  />
+                  <button
+                    onClick={(e) => handleStrategyClick(strat.id, e)}
+                    className="flex-1 flex items-center justify-between text-left"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm text-foreground">{strat.label}</span>
+                      <span className="text-xs text-foreground-muted">
+                        {strategyTimeframes[strat.id]?.length > 0 
+                          ? strategyTimeframes[strat.id].join(', ') 
+                          : 'Nenhum timeframe'}
+                      </span>
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-foreground-muted transition-transform ${expandedStrategy === strat.id ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
                 </div>
-              </label>
+                
+                {/* Timeframes da estratégia */}
+                {expandedStrategy === strat.id && (
+                  <div className="px-2 pb-2 pt-1 bg-background rounded-b">
+                    <p className="text-xs text-foreground-muted mb-2">Timeframes ativos:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {TIMEFRAMES.map((tf) => {
+                        const isActive = strategyTimeframes[strat.id]?.includes(tf);
+                        return (
+                          <button
+                            key={tf}
+                            onClick={() => toggleStrategyTimeframe(strat.id, tf)}
+                            className={`
+                              px-2 py-1 text-xs rounded transition-colors
+                              ${isActive 
+                                ? 'bg-accent-blue text-white' 
+                                : 'bg-background-tertiary text-foreground-muted hover:bg-background-secondary'
+                              }
+                            `}
+                          >
+                            {tf}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>
@@ -188,6 +272,9 @@ export function Sidebar() {
             </div>
           </div>
         </div>
+        
+        {/* Telegram Config */}
+        <TelegramConfig />
         
         {/* GCM Settings */}
         <div className="mb-6">

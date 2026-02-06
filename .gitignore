@@ -7,6 +7,10 @@ venv/
 env/
 .env
 
+# Config (sensitive data)
+backend/config/
+**/telegram_config.json
+
 # Build
 .next/
 out/
