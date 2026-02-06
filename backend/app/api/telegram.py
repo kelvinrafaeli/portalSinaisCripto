@@ -1,8 +1,8 @@
 """
-Portal Sinais - Telegram API Routes
+Portal Alertas - Telegram API Routes
 Configuração e teste de integração Telegram.
 Suporta grupos individuais por estratégia.
-"""
+""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -31,7 +31,7 @@ class SummaryGroupConfig(BaseModel):
 
 class TestMessage(BaseModel):
     """Mensagem de teste"""
-    message: str = "🚀 Portal Sinais - Teste de conexão!"
+    message: str = "🚀 Portal Alertas - Teste de conexão!"
     include_disclaimer: bool = True
     strategy: Optional[str] = None  # Testar grupo específico de estratégia
 
@@ -172,7 +172,7 @@ async def test_telegram(test: TestMessage = None):
             detail="Telegram não está configurado. Use /api/v1/telegram/configure primeiro."
         )
     
-    message = test.message if test else "🚀 Portal Sinais - Teste de conexão!"
+    message = test.message if test else "🚀 Portal Alertas - Teste de conexão!"
     include_disclaimer = test.include_disclaimer if test else True
     
     # Determinar chat_id baseado na estratégia ou usar o padrão

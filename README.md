@@ -1,11 +1,11 @@
-# 🚀 Portal Sinais
+# 🚀 Portal Alertas
 
-Sistema de Sinais de Trading em Tempo Real com análise de múltiplos indicadores técnicos.
+Sistema de Alertas de Trading em Tempo Real com análise de múltiplos indicadores técnicos.
 
 ## 📊 Features
 
 - **Múltiplas Estratégias**: RSI, MACD, GCM Heikin Ashi, COMBO
-- **WebSocket**: Sinais em tempo real
+- **WebSocket**: Alertas em tempo real
 - **Configurável**: Parâmetros ajustáveis via UI
 - **Multi-Timeframe**: Suporte a 1m, 5m, 15m, 1h, 4h, 1d
 - **Dark Mode**: Interface estilo TradingView
@@ -132,7 +132,7 @@ npm run dev
 ## 📡 API Endpoints
 
 ### Signals
-- `GET /api/v1/signals/` - Lista sinais recentes
+- `GET /api/v1/signals/` - Lista alertas recentes
 - `POST /api/v1/signals/analyze` - Executa análise manual
 - `GET /api/v1/signals/analyze/{symbol}/{timeframe}` - Analisa símbolo específico
 - `GET /api/v1/signals/stats` - Estatísticas do dashboard
@@ -149,7 +149,7 @@ npm run dev
 - `GET /api/v1/market/price/{symbol}` - Preço atual
 
 ### WebSocket
-- `WS /ws` - Stream de sinais em tempo real
+- `WS /ws` - Stream de alertas em tempo real
 - `WS /ws/signals?symbols=...&timeframes=...` - Stream com filtros
 
 ### Engine Control
@@ -184,12 +184,12 @@ npm run dev
 
 ### Header (Topo)
 - Status de conexão
-- Contadores de sinais Long/Short
+- Contadores de alertas Long/Short
 - Filtros rápidos por Timeframe
 - Filtros rápidos por Estratégia
 
 ### Feed (Centro)
-- Lista de sinais em tempo real
+- Lista de alertas em tempo real
 - Cards coloridos (verde=Long, vermelho=Short)
 - Detalhes do sinal (RSI, MACD, EMA50)
 

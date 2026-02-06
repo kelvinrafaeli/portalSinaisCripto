@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Portal Sinais | Trading Signals Dashboard',
-  description: 'Dashboard de sinais de trading em tempo real - RSI, MACD, GCM',
+  title: 'Portal Alertas | Trading Alerts Dashboard',
+  description: 'Dashboard de alertas de trading em tempo real - RSI, MACD, GCM',
 };
 
 export default function RootLayout({

@@ -1,6 +1,6 @@
 """
-Portal Sinais - Serviço de Telegram
-Envia sinais formatados para grupos do Telegram.
+Portal Alertas - Serviço de Telegram
+Envia alertas formatados para grupos do Telegram.
 Suporta grupos individuais por estratégia.
 """
 import asyncio

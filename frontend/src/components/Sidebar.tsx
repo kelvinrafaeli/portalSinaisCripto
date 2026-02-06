@@ -252,7 +252,7 @@ export function Sidebar() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-foreground-muted block mb-1">Sinal</label>
+                <label className="text-[10px] text-foreground-muted block mb-1">Alerta</label>
                 <input
                   type="number"
                   value={Number(params.signal_period)}
@@ -576,8 +576,8 @@ export function Sidebar() {
   return (
     <aside className="w-72 bg-background-secondary border-r border-border h-screen overflow-y-auto">
       <div className="p-4">
-        <h1 className="text-xl font-bold text-foreground mb-1">Portal Sinais</h1>
-        <p className="text-xs text-foreground-muted mb-6">Trading Signals Dashboard</p>
+        <h1 className="text-xl font-bold text-foreground mb-1">Portal Alertas</h1>
+        <p className="text-xs text-foreground-muted mb-6">Trading Alerts Dashboard</p>
         
         {/* Engine Control */}
         <div className="mb-6">

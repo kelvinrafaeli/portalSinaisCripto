@@ -119,7 +119,7 @@ export function Header() {
           onClick={clearSignals}
           className="px-4 py-1.5 text-xs text-foreground-muted hover:text-foreground bg-background-tertiary rounded transition-colors"
         >
-          Limpar
+          Limpar Alertas
         </button>
       </div>
     </header>

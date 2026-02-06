@@ -25,9 +25,9 @@ export function SignalFeed() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="text-4xl mb-4">📊</div>
-            <p className="text-foreground-muted text-lg mb-2">Aguardando sinais...</p>
+            <p className="text-foreground-muted text-lg mb-2">Aguardando alertas...</p>
             <p className="text-foreground-muted text-sm">
-              Os sinais aparecerão aqui quando forem detectados
+              Os alertas aparecerão aqui quando forem detectados
             </p>
           </div>
         </div>
