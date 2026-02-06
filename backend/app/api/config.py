@@ -28,7 +28,7 @@ DEFAULT_STRATEGY_TIMEFRAMES = {
     "SCALPING": ["3m", "5m"],
     "SWING_TRADE": ["4h", "1d"],
     "DAY_TRADE": ["15m", "1h"],
-    "COMBO": ["1h", "4h"],
+    "JFN": ["15m", "1h", "4h"],
 }
 
 
@@ -37,7 +37,10 @@ def load_strategy_timeframes() -> Dict[str, List[str]]:
     try:
         if STRATEGY_TIMEFRAMES_FILE.exists():
             with open(STRATEGY_TIMEFRAMES_FILE, 'r') as f:
-                return json.load(f)
+                loaded = json.load(f)
+                merged = DEFAULT_STRATEGY_TIMEFRAMES.copy()
+                merged.update(loaded)
+                return merged
     except Exception:
         pass
     return DEFAULT_STRATEGY_TIMEFRAMES.copy()
@@ -65,9 +68,10 @@ async def get_current_config():
     return {
         "strategies": {
             "active": settings.strategies_list,
-            "available": ["RSI", "MACD", "GCM", "COMBO", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE"],
+            "available": ["RSI", "MACD", "GCM", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE", "JFN"],
             "timeframes": strategy_timeframes
         },
+        "strategy_params": signal_engine.get_strategy_params(),
         "symbols": settings.symbols_list,
         "timeframes": settings.timeframes_list,
         "rsi": {
@@ -84,11 +88,6 @@ async def get_current_config():
         "gcm": {
             "harsi_len": settings.harsi_len,
             "harsi_smooth": settings.harsi_smooth
-        },
-        "combo": {
-            "require_ema50": settings.combo_require_ema50,
-            "allow_mixed_dir": settings.combo_allow_mixed_dir,
-            "confirm_window": settings.confirm_window
         },
         "worker": {
             "chunk_size": settings.chunk_size,

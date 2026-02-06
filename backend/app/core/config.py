@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     binance_secret: str = ""
     
     # Strategy Settings (como JSON strings no .env)
-    active_strategies: str = '["GCM", "RSI", "MACD", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE"]'
+    active_strategies: str = '["GCM", "RSI", "MACD", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE", "JFN"]'
     timeframes: str = '["3m", "5m", "15m", "1h", "4h"]'
     symbols: str = '["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", "MATICUSDT", "LTCUSDT"]'
     
@@ -44,9 +44,6 @@ class Settings(BaseSettings):
     harsi_len: int = 10
     harsi_smooth: int = 5
     
-    # COMBO
-    combo_require_ema50: bool = True
-    combo_allow_mixed_dir: bool = False
     confirm_window: int = 6
     
     # Scalping

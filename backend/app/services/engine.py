@@ -16,8 +16,9 @@ from app.services.telegram import telegram_service
 from app.services.cryptobubbles import cryptobubbles_service
 from app.strategies import (
     BaseStrategy, SignalResult,
-    RSIStrategy, MACDStrategy, GCMStrategy, ComboStrategy,
-    ScalpingStrategy, SwingTradeStrategy, DayTradeStrategy, RsiEma50Strategy
+    RSIStrategy, MACDStrategy, GCMStrategy,
+    ScalpingStrategy, SwingTradeStrategy, DayTradeStrategy, RsiEma50Strategy,
+    JFNStrategy
 )
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ DEFAULT_STRATEGY_TIMEFRAMES = {
     "SCALPING": ["3m", "5m"],
     "SWING_TRADE": ["1h", "4h", "1d"],
     "DAY_TRADE": ["15m", "30m", "1h"],
-    "COMBO": ["15m", "1h", "4h"]
+    "JFN": ["15m", "1h", "4h"]
 }
 
 
@@ -101,15 +102,6 @@ class SignalEngine:
                 harsi_length=settings.harsi_len,
                 harsi_smooth=settings.harsi_smooth
             ),
-            "COMBO": ComboStrategy(
-                rsi_period=settings.rsi_period,
-                rsi_signal=settings.rsi_signal,
-                macd_fast=settings.macd_fast,
-                macd_slow=settings.macd_slow,
-                macd_signal=settings.macd_signal,
-                confirm_window=settings.confirm_window,
-                require_ema50=settings.combo_require_ema50
-            ),
             "SCALPING": ScalpingStrategy(
                 ema_fast=settings.scalping_ema_fast,
                 ema_slow=settings.scalping_ema_slow,
@@ -129,7 +121,8 @@ class SignalEngine:
             "RSI_EMA50": RsiEma50Strategy(
                 rsi_period=settings.rsi_period,
                 rsi_signal=settings.rsi_signal
-            )
+            ),
+            "JFN": JFNStrategy()
         }
         
         # Configurar Telegram
@@ -147,7 +140,9 @@ class SignalEngine:
         try:
             if os.path.exists(STRATEGY_TIMEFRAMES_FILE):
                 with open(STRATEGY_TIMEFRAMES_FILE, 'r') as f:
-                    self.strategy_timeframes = json.load(f)
+                    loaded = json.load(f)
+                    self.strategy_timeframes = DEFAULT_STRATEGY_TIMEFRAMES.copy()
+                    self.strategy_timeframes.update(loaded)
                     logger.info(f"Loaded strategy timeframes from {STRATEGY_TIMEFRAMES_FILE}")
             else:
                 self.strategy_timeframes = DEFAULT_STRATEGY_TIMEFRAMES.copy()
@@ -160,6 +155,31 @@ class SignalEngine:
         """
         Atualiza parâmetros das estratégias dinamicamente.
         """
+        if "strategy_params" in config:
+            strategy_params = config.get("strategy_params", {}) or {}
+            for strategy_name, params in strategy_params.items():
+                if strategy_name not in self.strategies:
+                    continue
+                current_params = getattr(self.strategies[strategy_name], "params", {}).copy()
+                current_params.update(params or {})
+
+                if strategy_name == "RSI":
+                    self.strategies[strategy_name] = RSIStrategy(**current_params)
+                elif strategy_name == "MACD":
+                    self.strategies[strategy_name] = MACDStrategy(**current_params)
+                elif strategy_name == "GCM":
+                    self.strategies[strategy_name] = GCMStrategy(**current_params)
+                elif strategy_name == "SCALPING":
+                    self.strategies[strategy_name] = ScalpingStrategy(**current_params)
+                elif strategy_name == "SWING_TRADE":
+                    self.strategies[strategy_name] = SwingTradeStrategy(**current_params)
+                elif strategy_name == "DAY_TRADE":
+                    self.strategies[strategy_name] = DayTradeStrategy(**current_params)
+                elif strategy_name == "RSI_EMA50":
+                    self.strategies[strategy_name] = RsiEma50Strategy(**current_params)
+                elif strategy_name == "JFN":
+                    self.strategies[strategy_name] = JFNStrategy(**current_params)
+
         if "rsi_period" in config:
             self.strategies["RSI"] = RSIStrategy(
                 period=config.get("rsi_period", 14),
@@ -182,6 +202,13 @@ class SignalEngine:
             )
         
         logger.info("Strategies updated with new configuration")
+
+    def get_strategy_params(self) -> Dict[str, Dict[str, Any]]:
+        """Retorna parametros atuais de cada estrategia"""
+        params: Dict[str, Dict[str, Any]] = {}
+        for name, strategy in self.strategies.items():
+            params[name] = getattr(strategy, "params", {}).copy()
+        return params
     
     def update_strategy_timeframes(self, strategy_timeframes: Dict[str, List[str]]):
         """
@@ -290,7 +317,18 @@ class SignalEngine:
     
     async def _emit_signal(self, signal: SignalResult):
         """Emite sinal para todos os callbacks registrados e Telegram"""
-        # Enviar para callbacks (WebSocket) - sempre envia para atualizar UI em tempo real
+        # Verificar se deve enviar (evita duplicados na mesma vela)
+        if not self._should_send_signal(signal):
+            logger.debug("Skipping signal - already sent for this candle")
+            return
+
+        # Verificar se ha grupo configurado para a estrategia
+        target_chat = telegram_service.get_strategy_group(signal.strategy) or telegram_service.chat_id
+        if not target_chat:
+            logger.debug(f"Skipping signal - no Telegram group configured for {signal.strategy}")
+            return
+
+        # Enviar para callbacks (WebSocket)
         for callback in self._signal_callbacks:
             try:
                 if asyncio.iscoroutinefunction(callback):
@@ -299,11 +337,6 @@ class SignalEngine:
                     callback(signal)
             except Exception as e:
                 logger.error(f"Error in signal callback: {e}")
-        
-        # Verificar se deve enviar para o Telegram (evita duplicados na mesma vela)
-        if not self._should_send_signal(signal):
-            logger.debug(f"Skipping Telegram notification - signal already sent for this candle")
-            return
         
         # Enviar para Telegram
         if telegram_service.is_enabled:

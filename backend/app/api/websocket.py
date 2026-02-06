@@ -86,7 +86,7 @@ async def signals_websocket(
     """
     WebSocket com filtros via query params.
     
-    Exemplo: /ws/signals?symbols=BTCUSDT,ETHUSDT&timeframes=1h,4h&strategies=COMBO,GCM
+    Exemplo: /ws/signals?symbols=BTCUSDT,ETHUSDT&timeframes=1h,4h&strategies=GCM,RSI
     """
     # Parse query params
     symbol_list = symbols.split(",") if symbols else None

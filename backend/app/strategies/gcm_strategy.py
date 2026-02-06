@@ -23,14 +23,26 @@ class GCMStrategy(BaseStrategy):
     def __init__(
         self,
         harsi_length: int = 10,
-        harsi_smooth: int = 5
+        harsi_smooth: int = 5,
+        rsi_length: int = 7,
+        rsi_mode: bool = True,
+        rsi_buy_level: float = -20.0,
+        rsi_sell_level: float = 20.0
     ):
         super().__init__(
             harsi_length=harsi_length,
-            harsi_smooth=harsi_smooth
+            harsi_smooth=harsi_smooth,
+            rsi_length=rsi_length,
+            rsi_mode=rsi_mode,
+            rsi_buy_level=rsi_buy_level,
+            rsi_sell_level=rsi_sell_level
         )
         self.harsi_length = harsi_length
         self.harsi_smooth = harsi_smooth
+        self.rsi_length = rsi_length
+        self.rsi_mode = rsi_mode
+        self.rsi_buy_level = rsi_buy_level
+        self.rsi_sell_level = rsi_sell_level
     
     def _zrsi(self, series: pd.Series, period: int) -> pd.Series:
         """
@@ -39,6 +51,26 @@ class GCMStrategy(BaseStrategy):
         """
         rsi = self.rsi_wilder(series, period)
         return rsi - 50
+
+    def _f_rsi(self, series: pd.Series, period: int, mode: bool) -> pd.Series:
+        """
+        RSI centralizado em zero, opcionalmente suavizado.
+        Replica f_rsi do Pine.
+        """
+        zrsi = self._zrsi(series, period)
+        if not mode:
+            return zrsi
+
+        smoothed = pd.Series(index=series.index, dtype=float)
+        for i in range(len(series)):
+            if pd.isna(zrsi.iloc[i]):
+                smoothed.iloc[i] = pd.NA
+                continue
+            if i == 0 or pd.isna(smoothed.iloc[i - 1]):
+                smoothed.iloc[i] = zrsi.iloc[i]
+            else:
+                smoothed.iloc[i] = (smoothed.iloc[i - 1] + zrsi.iloc[i]) / 2
+        return smoothed
     
     def calculate_harsi(self, df: pd.DataFrame) -> tuple:
         """
@@ -125,58 +157,50 @@ class GCMStrategy(BaseStrategy):
     ) -> Optional[SignalResult]:
         """Analisa GCM e retorna sinal se houver mudança de tendência"""
         
-        min_rows = self.harsi_length + self.harsi_smooth + 10
+        min_rows = max(self.harsi_length + self.harsi_smooth + 10, self.rsi_length + 5)
         if not self.validate_dataframe(df, min_rows=min_rows):
             return None
         
         # Calcular Heikin Ashi RSI
         ha_open, ha_high, ha_low, ha_close = self.calculate_harsi(df)
         
-        # Índices para análise
+        # RSI centralizado (zRSI) com opcional suavizacao
+        source = (df['open'] + df['high'] + df['low'] + df['close']) / 4
+        rsi_series = self._f_rsi(source, self.rsi_length, self.rsi_mode)
+
         curr_idx = len(df) - 1
         prev_idx = len(df) - 2
-        
-        ha_close_curr = ha_close.iloc[curr_idx]
-        ha_open_curr = ha_open.iloc[curr_idx]
-        ha_close_prev = ha_close.iloc[prev_idx]
-        ha_open_prev = ha_open.iloc[prev_idx]
-        
-        # Verificar valores válidos
-        if any(pd.isna([ha_close_curr, ha_open_curr, ha_close_prev, ha_open_prev])):
+
+        rsi_curr = rsi_series.iloc[curr_idx]
+        rsi_prev = rsi_series.iloc[prev_idx]
+
+        if pd.isna(rsi_curr) or pd.isna(rsi_prev):
             return None
-        
-        # Determinar se candle é bullish (verde) ou bearish (vermelho)
-        is_green_curr = ha_close_curr > ha_open_curr
-        is_green_prev = ha_close_prev > ha_open_prev
-        
-        # Detectar mudanças de tendência
-        # harsiBull = (C > O) and not (C[1] > O[1])  -> Virou de vermelho para verde
-        # harsiBear = not(C > O) and (C[1] > O[1])   -> Virou de verde para vermelho
-        harsi_bull = is_green_curr and not is_green_prev
-        harsi_bear = not is_green_curr and is_green_prev
+
+        rsi_rising = rsi_curr >= rsi_prev
+        rsi_rising_prev = rsi_prev >= rsi_series.iloc[prev_idx - 1] if prev_idx - 1 >= 0 else rsi_rising
+
+        # Fast signals (bolinha) no RSI
+        rsi_bull = rsi_rising and not rsi_rising_prev
+        rsi_bear = not rsi_rising and rsi_rising_prev
+
+        # Apenas alertas quando a bolinha esta em -20 (buy) ou 20 (sell)
+        rsi_bull_allowed = rsi_bull and rsi_prev <= self.rsi_buy_level
+        rsi_bear_allowed = rsi_bear and rsi_prev >= self.rsi_sell_level
         
         last_close = df['close'].iloc[-1]
         direction = None
         message = ""
         
-        if harsi_bull:
+        if rsi_bull_allowed:
             direction = "LONG"
             message = (
-                f"🚀 GCM TREND CLOUD: BULL START 🟢\n"
-                f"Símbolo: {symbol}\n"
-                f"Timeframe: {timeframe}\n"
-                f"HA-RSI virou positivo\n"
-                f"Cloud mudou de vermelho para verde"
+                f"GCM: FAST BUY (RSI {self.rsi_buy_level:.0f})"
             )
-        
-        elif harsi_bear:
+        elif rsi_bear_allowed:
             direction = "SHORT"
             message = (
-                f"🔻 GCM TREND CLOUD: BEAR START 🔴\n"
-                f"Símbolo: {symbol}\n"
-                f"Timeframe: {timeframe}\n"
-                f"HA-RSI virou negativo\n"
-                f"Cloud mudou de verde para vermelho"
+                f"GCM: FAST SELL (RSI {self.rsi_sell_level:.0f})"
             )
         
         if direction:
@@ -191,16 +215,12 @@ class GCMStrategy(BaseStrategy):
                 direction=direction,
                 price=last_close,
                 message=message,
-                rsi=round(rsi, 2) if not pd.isna(rsi) else None,
+                rsi=round(rsi_prev, 2),
                 ema50=round(ema50, 2) if not pd.isna(ema50) else None,
                 raw_data={
-                    "ha_close": round(ha_close_curr, 4),
-                    "ha_open": round(ha_open_curr, 4),
-                    "ha_high": round(ha_high.iloc[curr_idx], 4),
-                    "ha_low": round(ha_low.iloc[curr_idx], 4),
-                    "cloud_status": "BULLISH" if is_green_curr else "BEARISH",
-                    "harsi_bull": harsi_bull,
-                    "harsi_bear": harsi_bear
+                    "rsi_fast": round(rsi_prev, 4),
+                    "rsi_bull": rsi_bull,
+                    "rsi_bear": rsi_bear
                 }
             )
         

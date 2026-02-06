@@ -15,7 +15,6 @@ const STRATEGY_INFO: Record<string, { type: string; label: string; color: string
   'SCALPING': { type: 'SCALPING', label: 'Scalping', color: 'bg-yellow-500/20 text-yellow-400' },
   'SWING_TRADE': { type: 'SWING TRADE', label: 'Swing Trade', color: 'bg-emerald-500/20 text-emerald-400' },
   'DAY_TRADE': { type: 'DAY TRADE', label: 'Day Trade', color: 'bg-orange-500/20 text-orange-400' },
-  'COMBO': { type: 'DAY TRADE', label: 'Day Trade', color: 'bg-orange-500/20 text-orange-400' },
 };
 
 export function SignalCard({ signal }: SignalCardProps) {

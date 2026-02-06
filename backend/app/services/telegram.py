@@ -1,12 +1,13 @@
 """
 Portal Sinais - Serviço de Telegram
 Envia sinais formatados para grupos do Telegram.
+Suporta grupos individuais por estratégia.
 """
 import asyncio
 import aiohttp
 from aiohttp import TCPConnector
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import socket
 import json
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Disclaimer de responsabilidade
 DISCLAIMER = """
-⚠️ *AVISO DE RESPONSABILIDADE*
+⚠️ AVISO DE RESPONSABILIDADE ⚠️
 Isso NÃO é uma recomendação de investimento.
 Faça sua própria análise antes de operar.
 """
@@ -35,11 +36,13 @@ CONFIG_FILE = CONFIG_DIR / "telegram_config.json"
 class TelegramService:
     """
     Serviço para enviar mensagens ao Telegram.
+    Suporta grupos individuais por estratégia.
     """
     
     def __init__(self, bot_token: str = "", chat_id: str = ""):
         self.bot_token = bot_token
-        self.chat_id = chat_id
+        self.chat_id = chat_id  # Chat padrão (fallback)
+        self.strategy_groups: Dict[str, str] = {}  # Mapeamento estratégia -> chat_id
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self._enabled = bool(bot_token and chat_id)
         
@@ -54,10 +57,11 @@ class TelegramService:
                     config = json.load(f)
                     self.bot_token = config.get('bot_token', '')
                     self.chat_id = config.get('chat_id', '')
+                    self.strategy_groups = config.get('strategy_groups', {})
                     self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
-                    self._enabled = bool(self.bot_token and self.chat_id)
+                    self._enabled = bool(self.bot_token)
                     if self._enabled:
-                        logger.info("Telegram configuration loaded from file")
+                        logger.info(f"Telegram configuration loaded. Groups: {list(self.strategy_groups.keys())}")
         except Exception as e:
             logger.warning(f"Could not load Telegram config: {e}")
     
@@ -70,20 +74,45 @@ class TelegramService:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump({
                     'bot_token': self.bot_token,
-                    'chat_id': self.chat_id
+                    'chat_id': self.chat_id,
+                    'strategy_groups': self.strategy_groups
                 }, f, indent=2)
             logger.info("Telegram configuration saved to file")
         except Exception as e:
             logger.error(f"Could not save Telegram config: {e}")
         
-    def configure(self, bot_token: str, chat_id: str):
-        """Configura credenciais do Telegram"""
+    def configure(self, bot_token: str, chat_id: str = ""):
+        """Configura credenciais do Telegram (token e chat padrão opcional)"""
         self.bot_token = bot_token
-        self.chat_id = chat_id
+        if chat_id:
+            self.chat_id = chat_id
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
-        self._enabled = bool(bot_token and chat_id)
+        self._enabled = bool(bot_token)
         
         # Salvar configuração em arquivo
+        self._save_config()
+    
+    def configure_strategy_group(self, strategy: str, chat_id: str):
+        """Configura grupo específico para uma estratégia"""
+        if chat_id:
+            self.strategy_groups[strategy.upper()] = chat_id
+        else:
+            # Remover configuração se chat_id for vazio
+            self.strategy_groups.pop(strategy.upper(), None)
+        self._save_config()
+        logger.info(f"Strategy {strategy} configured with chat_id: {chat_id}")
+    
+    def get_strategy_group(self, strategy: str) -> Optional[str]:
+        """Retorna o chat_id configurado para uma estratégia"""
+        return self.strategy_groups.get(strategy.upper())
+    
+    def get_all_strategy_groups(self) -> Dict[str, str]:
+        """Retorna todos os grupos configurados por estratégia"""
+        return self.strategy_groups.copy()
+    
+    def remove_strategy_group(self, strategy: str):
+        """Remove a configuração de grupo para uma estratégia"""
+        self.strategy_groups.pop(strategy.upper(), None)
         self._save_config()
         
     @property
@@ -102,69 +131,54 @@ class TelegramService:
         # Emoji baseado na direção
         direction_emoji = "⬆️" if direction == "LONG" else "⬇️"
         signal_text = "LONG" if direction == "LONG" else "SHORT"
-        
-        # Formatação específica por estratégia
-        if strategy == "RSI":
-            # Valor do RSI
-            rsi_value = f"{signal.rsi:.2f}" if signal.rsi else "N/A"
-            return f"""🚨 INDICADOR RSI 🚨
 
-Ativo: {symbol}
-RSI: {rsi_value}
-Tempo gráfico: {timeframe}"""
+        def _format_price(value: float) -> str:
+            if value >= 1:
+                return f"{value:.4f}"
+            if value >= 0.01:
+                return f"{value:.6f}"
+            return f"{value:.8f}"
 
-        elif strategy == "MACD":
-            return f"""🔀 CRUZAMENTO MACD 🔀
+        display_names = {
+            "RSI_EMA50": "RSI EMA50",
+            "DAY_TRADE": "DAY TRADE",
+            "SWING_TRADE": "SWING TRADE",
+        }
+        display_name = display_names.get(strategy, strategy.replace("_", " "))
+        title = f"*{display_name}*"
+        lines = [
+            title,
+            "",
+            f"*Ativo: {symbol} 🧩*",
+            f"_Sinal: {signal_text} {direction_emoji}_",
+            "",
+            f"Timeframe: {timeframe} ⏱️",
+        ]
 
-{symbol}
-MACD CRUZOU {direction_emoji}
-Tempo gráfico: {timeframe}"""
-
+        raw = signal.raw_data or {}
+        indicator_lines = []
+        if strategy == "RSI" and signal.rsi is not None:
+            indicator_lines.append(f"RSI: {signal.rsi:.2f}")
+        elif strategy == "MACD" and signal.macd is not None and signal.macd_signal is not None:
+            indicator_lines.append(f"MACD: {signal.macd:.4f} | Signal: {signal.macd_signal:.4f}")
         elif strategy == "RSI_EMA50":
-            # Valor do RSI
-            rsi_value = f"{signal.rsi:.2f}" if signal.rsi else "N/A"
-            return f"""📊 RSI + EMA50 📊
-
-Ativo: {symbol}
-RSI: {rsi_value}
-MACD CRUZOU {direction_emoji}
-Tempo gráfico: {timeframe}"""
-
-        elif strategy == "GCM":
-            return f"""🏆 INDICADOR GCM 🏆
-
-Ativo: {symbol}
-Sinal: {signal_text} {direction_emoji}
-Tempo gráfico: {timeframe}"""
-
+            if signal.rsi is not None:
+                indicator_lines.append(f"RSI: {signal.rsi:.2f}")
+            if signal.ema50 is not None:
+                indicator_lines.append(f"EMA50: {signal.ema50:.4f}")
         elif strategy == "SCALPING":
-            return f"""⚡ SCALPING ⚡
+            if signal.rsi is not None:
+                indicator_lines.append(f"RSI: {signal.rsi:.2f}")
+            if signal.ema50 is not None:
+                indicator_lines.append(f"EMA50: {signal.ema50:.4f}")
 
-Ativo: {symbol}
-Sinal: {signal_text} {direction_emoji}
-Tempo gráfico: {timeframe}"""
+        if indicator_lines:
+            lines.extend(["", *indicator_lines])
 
-        elif strategy == "SWING_TRADE" or strategy == "GCM_PRO":
-            return f"""📈 SWING TRADE 📈
+        if strategy == "JFN" and "assertiveness" in raw:
+            lines.extend(["", f"Assertividade: {raw['assertiveness']:.2f}% 🎯"])
 
-Ativo: {symbol}
-Sinal: {signal_text} {direction_emoji}
-Tempo gráfico: {timeframe}"""
-
-        elif strategy == "DAY_TRADE" or strategy == "COMBO":
-            return f"""💹 DAY TRADE 💹
-
-Ativo: {symbol}
-Sinal: {signal_text} {direction_emoji}
-Tempo gráfico: {timeframe}"""
-
-        else:
-            # Formato genérico
-            return f"""📢 {strategy} 📢
-
-Ativo: {symbol}
-Sinal: {signal_text} {direction_emoji}
-Tempo gráfico: {timeframe}"""
+        return "\n".join(lines)
     
     async def send_message(
         self, 
@@ -181,6 +195,9 @@ Tempo gráfico: {timeframe}"""
             return False
             
         target_chat = chat_id or self.chat_id
+        if not target_chat:
+            logger.warning("Telegram chat_id vazio - mensagem nao enviada")
+            return False
         
         # Adicionar disclaimer se solicitado
         full_text = text
@@ -239,7 +256,17 @@ Tempo gráfico: {timeframe}"""
     ) -> bool:
         """
         Formata e envia sinal para o Telegram.
+        Usa o grupo específico da estratégia se configurado.
         """
+        # Usar grupo específico da estratégia se não for passado um chat_id
+        if not chat_id:
+            chat_id = self.strategy_groups.get(signal.strategy.upper())
+        
+        # Se não houver grupo específico e não houver chat padrão, não envia
+        if not chat_id and not self.chat_id:
+            logger.debug(f"No chat configured for strategy {signal.strategy}")
+            return False
+            
         message = self.format_signal_message(signal)
         return await self.send_message(
             message, 

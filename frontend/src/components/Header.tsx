@@ -3,7 +3,16 @@
 import { useSignalStore } from '@/lib/store';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h', '1d'];
-const STRATEGIES = ['RSI', 'MACD', 'GCM', 'COMBO'];
+const STRATEGIES = [
+  { id: 'RSI', label: 'RSI' },
+  { id: 'MACD', label: 'MACD' },
+  { id: 'GCM', label: 'GCM' },
+  { id: 'RSI_EMA50', label: 'RSI EMA50' },
+  { id: 'SCALPING', label: 'SCALPING' },
+  { id: 'SWING_TRADE', label: 'SWING TRADE' },
+  { id: 'DAY_TRADE', label: 'DAY TRADE' },
+  { id: 'JFN', label: 'JFN' },
+];
 
 export function Header() {
   const isConnected = useSignalStore((state) => state.isConnected);
@@ -90,17 +99,17 @@ export function Header() {
           </button>
           {STRATEGIES.map((strat) => (
             <button
-              key={strat}
-              onClick={() => setActiveStrategy(strat)}
+              key={strat.id}
+              onClick={() => setActiveStrategy(strat.id)}
               className={`
                 px-3 py-1.5 rounded text-xs font-medium transition-colors
-                ${activeStrategy === strat 
+                ${activeStrategy === strat.id 
                   ? 'bg-accent-purple text-white' 
                   : 'bg-background-tertiary text-foreground-muted hover:bg-background-tertiary/80'
                 }
               `}
             >
-              {strat}
+              {strat.label}
             </button>
           ))}
         </div>

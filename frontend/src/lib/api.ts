@@ -114,20 +114,47 @@ class ApiClient {
 
   // Telegram endpoints
   async getTelegramStatus() {
-    return this.request<{ enabled: boolean; configured: boolean; masked_token?: string; masked_chat_id?: string }>('/telegram/status');
+    return this.request<{ 
+      enabled: boolean; 
+      configured: boolean; 
+      masked_token?: string; 
+      masked_chat_id?: string;
+      strategy_groups?: Record<string, string>;
+    }>('/telegram/status');
   }
 
-  async configureTelegram(botToken: string, chatId: string) {
+  async configureTelegram(botToken: string, chatId?: string) {
     return this.request('/telegram/configure', {
       method: 'POST',
-      body: JSON.stringify({ bot_token: botToken, chat_id: chatId }),
+      body: JSON.stringify({ bot_token: botToken, chat_id: chatId || '' }),
     });
   }
 
-  async testTelegram(message?: string) {
+  async configureStrategyGroup(strategy: string, chatId: string) {
+    return this.request('/telegram/strategy-group', {
+      method: 'POST',
+      body: JSON.stringify({ strategy, chat_id: chatId }),
+    });
+  }
+
+  async removeStrategyGroup(strategy: string) {
+    return this.request(`/telegram/strategy-group/${strategy}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getStrategyGroups() {
+    return this.request<{ groups: Record<string, string>; count: number }>('/telegram/strategy-groups');
+  }
+
+  async testTelegram(message?: string, strategy?: string) {
     return this.request('/telegram/test', {
       method: 'POST',
-      body: JSON.stringify({ message: message || '🚀 Portal Sinais - Teste de conexão!', include_disclaimer: false }),
+      body: JSON.stringify({ 
+        message: message || '🚀 Portal Sinais - Teste de conexão!', 
+        include_disclaimer: false,
+        strategy: strategy || null
+      }),
     });
   }
 

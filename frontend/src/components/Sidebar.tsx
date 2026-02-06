@@ -7,13 +7,14 @@ import { TelegramConfig } from './TelegramConfig';
 
 // Estratégias disponíveis com seus nomes de exibição
 const STRATEGIES = [
-  { id: 'GCM', label: 'GCM', description: 'Cruzamento simples' },
-  { id: 'RSI', label: 'RSI', description: 'Cruzamento RSI' },
-  { id: 'MACD', label: 'MACD', description: 'Cruzamento MACD' },
-  { id: 'RSI_EMA50', label: 'RSI + EMA50', description: 'RSI com filtro EMA50' },
-  { id: 'SCALPING', label: 'Scalping', description: 'EMA9/50 + RSI (3m)' },
-  { id: 'SWING_TRADE', label: 'Swing Trade', description: 'Operações longas' },
-  { id: 'DAY_TRADE', label: 'Day Trade', description: 'MACD + RSI juntos' },
+  { id: 'GCM', label: 'GCM', description: 'HA-RSI (Heikin Ashi RSI) com cruzamento de 50 e filtro de tendencia' },
+  { id: 'RSI', label: 'RSI', description: 'RSI Wilder cruzando niveis de sobrecompra/sobrevenda' },
+  { id: 'MACD', label: 'MACD', description: 'Linha MACD cruzando signal com confirmacao direcional' },
+  { id: 'RSI_EMA50', label: 'RSI + EMA50', description: 'RSI com filtro de tendencia pela EMA50' },
+  { id: 'SCALPING', label: 'Scalping', description: 'EMA9/EMA50 crossover com confirmacao RSI >/< 50' },
+  { id: 'SWING_TRADE', label: 'Swing Trade', description: 'HA-RSI cruzando 50 com filtro EMA100' },
+  { id: 'DAY_TRADE', label: 'Day Trade', description: 'Confluencia de cruzamentos MACD e RSI dentro de janela' },
+  { id: 'JFN', label: 'JFN', description: 'EMA20/EMA50 crossover com filtro de assertividade por simulacao' },
 ];
 const TIMEFRAMES = ['3m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
@@ -26,20 +27,33 @@ const DEFAULT_STRATEGY_TIMEFRAMES: Record<string, string[]> = {
   'SCALPING': ['3m', '5m'],
   'SWING_TRADE': ['4h', '1d'],
   'DAY_TRADE': ['15m', '1h'],
+  'JFN': ['15m', '1h', '4h'],
+};
+
+const DEFAULT_STRATEGY_PARAMS: Record<string, Record<string, number | boolean>> = {
+  RSI: { period: 14, signal_period: 9, overbought: 70, oversold: 30, use_ema_filter: true },
+  MACD: { fast_period: 12, slow_period: 26, signal_period: 9 },
+  GCM: { harsi_length: 10, harsi_smooth: 5, rsi_length: 7, rsi_mode: true, rsi_buy_level: -20, rsi_sell_level: 20 },
+  RSI_EMA50: { rsi_period: 14, rsi_signal: 9, ema_period: 50 },
+  SCALPING: { ema_fast: 9, ema_slow: 50, rsi_period: 14, rsi_neutral: 50 },
+  SWING_TRADE: { harsi_len: 14, harsi_smooth: 7, ema_filter: 100 },
+  DAY_TRADE: { macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_period: 14, rsi_ma_period: 9, confirm_window: 6 },
+  JFN: { fast_length: 20, slow_length: 50 },
 };
 
 export function Sidebar() {
-  const [rsiPeriod, setRsiPeriod] = useState(14);
-  const [rsiSignal, setRsiSignal] = useState(9);
-  const [macdFast, setMacdFast] = useState(12);
-  const [macdSlow, setMacdSlow] = useState(26);
-  const [macdSignal, setMacdSignal] = useState(9);
-  const [harsiLen, setHarsiLen] = useState(10);
-  const [harsiSmooth, setHarsiSmooth] = useState(5);
+  const [strategyParams, setStrategyParams] = useState<Record<string, Record<string, number | boolean>>>(
+    DEFAULT_STRATEGY_PARAMS
+  );
   
   const [activeStrategies, setActiveStrategies] = useState<string[]>(STRATEGIES.map(s => s.id));
   const [strategyTimeframes, setStrategyTimeframes] = useState<Record<string, string[]>>(DEFAULT_STRATEGY_TIMEFRAMES);
+  const [strategyGroups, setStrategyGroups] = useState<Record<string, string>>({});
+  const [groupInputs, setGroupInputs] = useState<Record<string, string>>({});
   const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
+  const [savingGroup, setSavingGroup] = useState<string | null>(null);
+  const [testingGroup, setTestingGroup] = useState<string | null>(null);
+  const [savingParams, setSavingParams] = useState<string | null>(null);
   
   const engineRunning = useSignalStore((state) => state.engineRunning);
   const setEngineRunning = useSignalStore((state) => state.setEngineRunning);
@@ -47,24 +61,20 @@ export function Sidebar() {
   useEffect(() => {
     // Carregar configuração inicial
     api.getConfig().then((config: any) => {
-      if (config.rsi) {
-        setRsiPeriod(config.rsi.period);
-        setRsiSignal(config.rsi.signal);
-      }
-      if (config.macd) {
-        setMacdFast(config.macd.fast);
-        setMacdSlow(config.macd.slow);
-        setMacdSignal(config.macd.signal);
-      }
-      if (config.gcm) {
-        setHarsiLen(config.gcm.harsi_len);
-        setHarsiSmooth(config.gcm.harsi_smooth);
-      }
       if (config.strategies?.active) {
         setActiveStrategies(config.strategies.active);
       }
       if (config.strategies?.timeframes) {
         setStrategyTimeframes(config.strategies.timeframes);
+      }
+      if (config.strategy_params) {
+        setStrategyParams((prev) => {
+          const merged: Record<string, Record<string, number | boolean>> = { ...prev };
+          Object.keys(DEFAULT_STRATEGY_PARAMS).forEach((key) => {
+            merged[key] = { ...DEFAULT_STRATEGY_PARAMS[key], ...(config.strategy_params[key] || {}) };
+          });
+          return merged;
+        });
       }
     }).catch(console.error);
 
@@ -72,7 +82,53 @@ export function Sidebar() {
     api.getEngineStatus().then((status) => {
       setEngineRunning(status.running);
     }).catch(console.error);
+
+    // Carregar grupos de Telegram por estratégia
+    api.getStrategyGroups().then((data) => {
+      setStrategyGroups(data.groups || {});
+    }).catch(console.error);
   }, [setEngineRunning]);
+
+  const handleSaveGroup = async (stratId: string) => {
+    const chatId = groupInputs[stratId]?.trim();
+    if (!chatId) return;
+    
+    setSavingGroup(stratId);
+    try {
+      await api.configureStrategyGroup(stratId, chatId);
+      // Atualizar estado local
+      setStrategyGroups(prev => ({ ...prev, [stratId]: chatId }));
+      setGroupInputs(prev => ({ ...prev, [stratId]: '' }));
+    } catch (error) {
+      console.error('Erro ao salvar grupo:', error);
+    } finally {
+      setSavingGroup(null);
+    }
+  };
+
+  const handleRemoveGroup = async (stratId: string) => {
+    try {
+      await api.removeStrategyGroup(stratId);
+      setStrategyGroups(prev => {
+        const updated = { ...prev };
+        delete updated[stratId];
+        return updated;
+      });
+    } catch (error) {
+      console.error('Erro ao remover grupo:', error);
+    }
+  };
+
+  const handleTestGroup = async (stratId: string) => {
+    setTestingGroup(stratId);
+    try {
+      await api.testTelegram(`🧪 Teste - Estratégia ${stratId}`, stratId);
+    } catch (error) {
+      console.error('Erro ao testar grupo:', error);
+    } finally {
+      setTestingGroup(null);
+    }
+  };
 
   const toggleStrategy = (stratId: string) => {
     setActiveStrategies((prev) =>
@@ -104,6 +160,349 @@ export function Sidebar() {
     setExpandedStrategy(expandedStrategy === stratId ? null : stratId);
   };
 
+  const updateStrategyParam = (stratId: string, key: string, value: number | boolean) => {
+    setStrategyParams((prev) => ({
+      ...prev,
+      [stratId]: {
+        ...(prev[stratId] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleSaveStrategyParams = async (stratId: string) => {
+    const params = strategyParams[stratId] || {};
+    setSavingParams(stratId);
+    try {
+      await api.updateConfig({ strategy_params: { [stratId]: params } });
+    } catch (error) {
+      console.error('Erro ao salvar parametros da estrategia:', error);
+    } finally {
+      setSavingParams(null);
+    }
+  };
+
+  const renderStrategyConfig = (stratId: string) => {
+    const params = strategyParams[stratId] || {};
+
+    switch (stratId) {
+      case 'RSI':
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-foreground-muted block mb-1">Periodo</label>
+                <input
+                  type="number"
+                  value={Number(params.period)}
+                  onChange={(e) => updateStrategyParam('RSI', 'period', Number(e.target.value))}
+                  className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-foreground-muted block mb-1">Sinal</label>
+                <input
+                  type="number"
+                  value={Number(params.signal_period)}
+                  onChange={(e) => updateStrategyParam('RSI', 'signal_period', Number(e.target.value))}
+                  className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-foreground-muted block mb-1">Overbought</label>
+                <input
+                  type="number"
+                  value={Number(params.overbought)}
+                  onChange={(e) => updateStrategyParam('RSI', 'overbought', Number(e.target.value))}
+                  className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-foreground-muted block mb-1">Oversold</label>
+                <input
+                  type="number"
+                  value={Number(params.oversold)}
+                  onChange={(e) => updateStrategyParam('RSI', 'oversold', Number(e.target.value))}
+                  className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+                />
+              </div>
+            </div>
+          </div>
+        );
+      case 'MACD':
+        return (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Fast</label>
+              <input
+                type="number"
+                value={Number(params.fast_period)}
+                onChange={(e) => updateStrategyParam('MACD', 'fast_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Slow</label>
+              <input
+                type="number"
+                value={Number(params.slow_period)}
+                onChange={(e) => updateStrategyParam('MACD', 'slow_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Signal</label>
+              <input
+                type="number"
+                value={Number(params.signal_period)}
+                onChange={(e) => updateStrategyParam('MACD', 'signal_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'RSI_EMA50':
+        return (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
+              <input
+                type="number"
+                value={Number(params.rsi_period)}
+                onChange={(e) => updateStrategyParam('RSI_EMA50', 'rsi_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Sinal</label>
+              <input
+                type="number"
+                value={Number(params.rsi_signal)}
+                onChange={(e) => updateStrategyParam('RSI_EMA50', 'rsi_signal', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA</label>
+              <input
+                type="number"
+                value={Number(params.ema_period)}
+                onChange={(e) => updateStrategyParam('RSI_EMA50', 'ema_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'SCALPING':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA Fast</label>
+              <input
+                type="number"
+                value={Number(params.ema_fast)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'ema_fast', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA Slow</label>
+              <input
+                type="number"
+                value={Number(params.ema_slow)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'ema_slow', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
+              <input
+                type="number"
+                value={Number(params.rsi_period)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI Neutro</label>
+              <input
+                type="number"
+                value={Number(params.rsi_neutral)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_neutral', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'SWING_TRADE':
+        return (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">HARSI Len</label>
+              <input
+                type="number"
+                value={Number(params.harsi_len)}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'harsi_len', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Smooth</label>
+              <input
+                type="number"
+                value={Number(params.harsi_smooth)}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'harsi_smooth', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA</label>
+              <input
+                type="number"
+                value={Number(params.ema_filter)}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'ema_filter', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'DAY_TRADE':
+        return (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">MACD Fast</label>
+              <input
+                type="number"
+                value={Number(params.macd_fast)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_fast', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">MACD Slow</label>
+              <input
+                type="number"
+                value={Number(params.macd_slow)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_slow', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">MACD Signal</label>
+              <input
+                type="number"
+                value={Number(params.macd_signal)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_signal', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
+              <input
+                type="number"
+                value={Number(params.rsi_period)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'rsi_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI MA</label>
+              <input
+                type="number"
+                value={Number(params.rsi_ma_period)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'rsi_ma_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Janela</label>
+              <input
+                type="number"
+                value={Number(params.confirm_window)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'confirm_window', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'GCM':
+        return (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">HARSI Len</label>
+              <input
+                type="number"
+                value={Number(params.harsi_length)}
+                onChange={(e) => updateStrategyParam('GCM', 'harsi_length', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Smooth</label>
+              <input
+                type="number"
+                value={Number(params.harsi_smooth)}
+                onChange={(e) => updateStrategyParam('GCM', 'harsi_smooth', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI Len</label>
+              <input
+                type="number"
+                value={Number(params.rsi_length)}
+                onChange={(e) => updateStrategyParam('GCM', 'rsi_length', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Buy Level</label>
+              <input
+                type="number"
+                value={Number(params.rsi_buy_level)}
+                onChange={(e) => updateStrategyParam('GCM', 'rsi_buy_level', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Sell Level</label>
+              <input
+                type="number"
+                value={Number(params.rsi_sell_level)}
+                onChange={(e) => updateStrategyParam('GCM', 'rsi_sell_level', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'JFN':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA Fast</label>
+              <input
+                type="number"
+                value={Number(params.fast_length)}
+                onChange={(e) => updateStrategyParam('JFN', 'fast_length', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA Slow</label>
+              <input
+                type="number"
+                value={Number(params.slow_length)}
+                onChange={(e) => updateStrategyParam('JFN', 'slow_length', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   const handleToggleEngine = async () => {
     try {
       if (engineRunning) {
@@ -117,6 +516,10 @@ export function Sidebar() {
       console.error('Failed to toggle engine:', error);
     }
   };
+
+  const rsiParams = strategyParams.RSI || DEFAULT_STRATEGY_PARAMS.RSI;
+  const macdParams = strategyParams.MACD || DEFAULT_STRATEGY_PARAMS.MACD;
+  const gcmParams = strategyParams.GCM || DEFAULT_STRATEGY_PARAMS.GCM;
 
   return (
     <aside className="w-72 bg-background-secondary border-r border-border h-screen overflow-y-auto">
@@ -183,29 +586,99 @@ export function Sidebar() {
                   </button>
                 </div>
                 
-                {/* Timeframes da estratégia */}
+                {/* Timeframes e Telegram da estratégia */}
                 {expandedStrategy === strat.id && (
-                  <div className="px-2 pb-2 pt-1 bg-background rounded-b">
-                    <p className="text-xs text-foreground-muted mb-2">Timeframes ativos:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {TIMEFRAMES.map((tf) => {
-                        const isActive = strategyTimeframes[strat.id]?.includes(tf);
-                        return (
+                  <div className="px-2 pb-2 pt-1 bg-background rounded-b space-y-3">
+                    {/* Timeframes */}
+                    <div>
+                      <p className="text-xs text-foreground-muted mb-2">Timeframes ativos:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {TIMEFRAMES.map((tf) => {
+                          const isActive = strategyTimeframes[strat.id]?.includes(tf);
+                          return (
+                            <button
+                              key={tf}
+                              onClick={() => toggleStrategyTimeframe(strat.id, tf)}
+                              className={`
+                                px-2 py-1 text-xs rounded transition-colors
+                                ${isActive 
+                                  ? 'bg-accent-blue text-white' 
+                                  : 'bg-background-tertiary text-foreground-muted hover:bg-background-secondary'
+                                }
+                              `}
+                            >
+                              {tf}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Configuracao da estrategia */}
+                    {(() => {
+                      const config = renderStrategyConfig(strat.id);
+                      if (!config) return null;
+                      return (
+                        <div className="pt-2 border-t border-border/50">
+                          <p className="text-xs text-foreground-muted mb-2">Parametros da estrategia:</p>
+                          {config}
                           <button
-                            key={tf}
-                            onClick={() => toggleStrategyTimeframe(strat.id, tf)}
-                            className={`
-                              px-2 py-1 text-xs rounded transition-colors
-                              ${isActive 
-                                ? 'bg-accent-blue text-white' 
-                                : 'bg-background-tertiary text-foreground-muted hover:bg-background-secondary'
-                              }
-                            `}
+                            onClick={() => handleSaveStrategyParams(strat.id)}
+                            disabled={savingParams === strat.id}
+                            className="mt-2 w-full py-1 text-xs bg-background-tertiary text-foreground hover:bg-background-secondary rounded"
                           >
-                            {tf}
+                            {savingParams === strat.id ? 'Salvando...' : 'Salvar parametros'}
                           </button>
-                        );
-                      })}
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Telegram Group */}
+                    <div className="pt-2 border-t border-border/50">
+                      <p className="text-xs text-foreground-muted mb-2">📱 Grupo Telegram:</p>
+                      {strategyGroups[strat.id] ? (
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 text-xs bg-background-tertiary px-2 py-1 rounded text-foreground">
+                            {strategyGroups[strat.id]}
+                          </code>
+                          <button
+                            onClick={() => handleTestGroup(strat.id)}
+                            disabled={testingGroup === strat.id}
+                            className="p-1 text-xs text-accent-blue hover:bg-accent-blue/10 rounded"
+                            title="Testar"
+                          >
+                            {testingGroup === strat.id ? '...' : '🧪'}
+                          </button>
+                          <button
+                            onClick={() => handleRemoveGroup(strat.id)}
+                            className="p-1 text-xs text-short hover:bg-short/10 rounded"
+                            title="Remover"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={groupInputs[strat.id] || ''}
+                            onChange={(e) => setGroupInputs(prev => ({ ...prev, [strat.id]: e.target.value }))}
+                            placeholder="-1001234567890"
+                            className="flex-1 bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground focus:border-accent-blue focus:outline-none placeholder:text-foreground-muted/50"
+                          />
+                          <button
+                            onClick={() => handleSaveGroup(strat.id)}
+                            disabled={savingGroup === strat.id || !groupInputs[strat.id]?.trim()}
+                            className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/90 disabled:opacity-50"
+                          >
+                            {savingGroup === strat.id ? '...' : '✓'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="px-2 py-2 rounded bg-accent-blue/10 text-accent-blue text-xs">
+                      {strat.description}
                     </div>
                   </div>
                 )}
@@ -214,105 +687,15 @@ export function Sidebar() {
           </div>
         </div>
         
-        {/* RSI Settings */}
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">RSI</h3>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Período</label>
-              <input
-                type="number"
-                value={rsiPeriod}
-                onChange={(e) => setRsiPeriod(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Sinal (SMA)</label>
-              <input
-                type="number"
-                value={rsiSignal}
-                onChange={(e) => setRsiSignal(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-        
-        {/* MACD Settings */}
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">MACD</h3>
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Fast</label>
-              <input
-                type="number"
-                value={macdFast}
-                onChange={(e) => setMacdFast(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-2 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Slow</label>
-              <input
-                type="number"
-                value={macdSlow}
-                onChange={(e) => setMacdSlow(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-2 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Signal</label>
-              <input
-                type="number"
-                value={macdSignal}
-                onChange={(e) => setMacdSignal(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-2 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-        
         {/* Telegram Config */}
         <TelegramConfig />
-        
-        {/* GCM Settings */}
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">GCM Heikin Ashi</h3>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Length</label>
-              <input
-                type="number"
-                value={harsiLen}
-                onChange={(e) => setHarsiLen(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-2 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-foreground-muted block mb-1">Smooth</label>
-              <input
-                type="number"
-                value={harsiSmooth}
-                onChange={(e) => setHarsiSmooth(Number(e.target.value))}
-                className="w-full bg-background border border-border rounded px-2 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
         
         {/* Apply Button */}
         <button
           onClick={async () => {
             try {
               await api.updateConfig({
-                rsi_period: rsiPeriod,
-                rsi_signal: rsiSignal,
-                macd_fast: macdFast,
-                macd_slow: macdSlow,
-                macd_signal: macdSignal,
-                harsi_len: harsiLen,
-                harsi_smooth: harsiSmooth,
+                strategy_params: strategyParams,
               });
               alert('Configurações atualizadas!');
             } catch (error) {

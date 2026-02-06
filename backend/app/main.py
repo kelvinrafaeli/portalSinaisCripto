@@ -60,7 +60,7 @@ app = FastAPI(
     
     ## Features
     
-    * **Múltiplas Estratégias**: RSI, MACD, GCM Heikin Ashi, COMBO
+    * **Múltiplas Estratégias**: RSI, MACD, GCM Heikin Ashi
     * **WebSocket**: Sinais em tempo real
     * **Configurável**: Parâmetros ajustáveis via API
     * **Multi-Timeframe**: Suporte a 1m, 5m, 15m, 1h, 4h, 1d
@@ -70,7 +70,6 @@ app = FastAPI(
     - **RSI**: Cruzamento de RSI com média de sinal + filtro EMA50
     - **MACD**: Cruzamento MACD clássico (12, 26, 9)
     - **GCM**: GCM Heikin Ashi RSI Trend Cloud
-    - **COMBO**: Confirmação MACD + RSI na mesma direção
     
     ## WebSocket
     

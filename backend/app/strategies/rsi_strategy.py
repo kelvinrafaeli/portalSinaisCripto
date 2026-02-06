@@ -20,8 +20,8 @@ class RSIStrategy(BaseStrategy):
         self,
         period: int = 14,
         signal_period: int = 9,
-        overbought: int = 85,
-        oversold: int = 15,
+        overbought: int = 70,
+        oversold: int = 30,
         use_ema_filter: bool = True
     ):
         super().__init__(

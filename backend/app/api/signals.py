@@ -27,7 +27,7 @@ async def get_recent_signals(
     
     Filtros opcionais:
     - symbol: Filtrar por símbolo (ex: BTCUSDT)
-    - strategy: Filtrar por estratégia (RSI, MACD, GCM, COMBO)
+    - strategy: Filtrar por estratégia (RSI, MACD, GCM)
     - timeframe: Filtrar por timeframe (1h, 4h, etc)
     """
     # TODO: Implementar busca do banco de dados

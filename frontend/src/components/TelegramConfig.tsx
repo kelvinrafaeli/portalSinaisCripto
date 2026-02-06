@@ -8,19 +8,18 @@ interface TelegramStatus {
   configured: boolean;
   masked_token?: string;
   masked_chat_id?: string;
+  strategy_groups?: Record<string, string>;
 }
 
 export function TelegramConfig() {
   const [isOpen, setIsOpen] = useState(false);
   const [botToken, setBotToken] = useState('');
-  const [chatId, setChatId] = useState('');
   const [status, setStatus] = useState<TelegramStatus>({ enabled: false, configured: false });
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    // Carregar status inicial
     loadStatus();
   }, []);
 
@@ -34,15 +33,8 @@ export function TelegramConfig() {
   };
 
   const handleSave = async () => {
-    // Se não está configurado, ambos são obrigatórios
-    if (!status.configured && (!botToken.trim() || !chatId.trim())) {
-      setMessage({ type: 'error', text: 'Preencha todos os campos' });
-      return;
-    }
-    
-    // Se já está configurado mas nenhum campo foi preenchido
-    if (status.configured && !botToken.trim() && !chatId.trim()) {
-      setMessage({ type: 'error', text: 'Preencha pelo menos um campo para atualizar' });
+    if (!botToken.trim()) {
+      setMessage({ type: 'error', text: 'Preencha o token do bot' });
       return;
     }
 
@@ -50,29 +42,10 @@ export function TelegramConfig() {
     setMessage(null);
 
     try {
-      // Buscar configuração atual se precisar manter algum valor
-      let tokenToSave = botToken.trim();
-      let chatIdToSave = chatId.trim();
-      
-      // Se já configurado e campo vazio, usar valor atual (enviar vazio e deixar backend manter)
-      if (status.configured) {
-        if (!tokenToSave || !chatIdToSave) {
-          setMessage({ type: 'error', text: 'Preencha ambos os campos para atualizar' });
-          setIsSaving(false);
-          return;
-        }
-      }
-      
-      await api.configureTelegram(tokenToSave, chatIdToSave);
-      
-      // Recarregar status para mostrar dados mascarados
+      await api.configureTelegram(botToken.trim());
       await loadStatus();
-      
-      setMessage({ type: 'success', text: 'Telegram configurado com sucesso!' });
-      
-      // Limpar campos após salvar (segurança)
+      setMessage({ type: 'success', text: 'Token configurado com sucesso!' });
       setBotToken('');
-      setChatId('');
     } catch (error) {
       setMessage({ type: 'error', text: 'Erro ao configurar Telegram' });
     } finally {
@@ -85,10 +58,14 @@ export function TelegramConfig() {
     setMessage(null);
 
     try {
-      await api.testTelegram();
+      const strategies = Object.keys(status.strategy_groups || {});
+      if (strategies.length > 0) {
+        await api.testTelegram(undefined, strategies[0]);
+      } else {
+        await api.testTelegram();
+      }
       setMessage({ type: 'success', text: 'Mensagem de teste enviada!' });
     } catch (error: any) {
-      // Tentar extrair mensagem de erro da API
       let errorText = 'Falha ao enviar mensagem.';
       try {
         const response = await error?.response?.json?.();
@@ -96,7 +73,6 @@ export function TelegramConfig() {
           errorText = response.detail;
         }
       } catch {
-        // Se não conseguir extrair, usar mensagem padrão
         if (error?.message?.includes('503') || error?.message?.includes('fetch')) {
           errorText = 'Erro de conexão: verifique sua internet/DNS.';
         }
@@ -106,6 +82,8 @@ export function TelegramConfig() {
       setIsTesting(false);
     }
   };
+
+  const groupCount = Object.keys(status.strategy_groups || {}).length;
 
   return (
     <div className="mb-6">
@@ -118,7 +96,9 @@ export function TelegramConfig() {
           <div className="text-left">
             <span className="text-sm font-medium text-foreground block">Telegram</span>
             <span className="text-xs text-foreground-muted">
-              {status.configured ? 'Configurado' : 'Não configurado'}
+              {status.configured 
+                ? `Token OK • ${groupCount} grupo${groupCount !== 1 ? 's' : ''}`
+                : 'Não configurado'}
             </span>
           </div>
         </div>
@@ -140,17 +120,8 @@ export function TelegramConfig() {
           {/* Mostrar configuração atual se existir */}
           {status.configured && status.masked_token && (
             <div className="p-3 rounded bg-background-secondary border border-border">
-              <p className="text-xs text-foreground-muted mb-2">✅ Configuração atual:</p>
-              <div className="space-y-1">
-                <p className="text-sm text-foreground">
-                  <span className="text-foreground-muted">Token: </span>
-                  <code className="bg-background-tertiary px-1 rounded">{status.masked_token}</code>
-                </p>
-                <p className="text-sm text-foreground">
-                  <span className="text-foreground-muted">Chat ID: </span>
-                  <code className="bg-background-tertiary px-1 rounded">{status.masked_chat_id}</code>
-                </p>
-              </div>
+              <p className="text-xs text-foreground-muted mb-2">✅ Token configurado:</p>
+              <code className="text-sm bg-background-tertiary px-2 py-1 rounded">{status.masked_token}</code>
             </div>
           )}
 
@@ -158,7 +129,7 @@ export function TelegramConfig() {
             {/* Bot Token */}
             <div className="mb-4">
               <label className="text-xs text-foreground-muted block mb-1">
-                {status.configured ? 'Novo Token do Bot' : 'Token do Bot'}
+                {status.configured ? 'Atualizar Token' : 'Token do Bot'}
                 <span className="text-foreground-muted ml-1">(do @BotFather)</span>
               </label>
               <input
@@ -166,28 +137,9 @@ export function TelegramConfig() {
                 autoComplete="off"
                 value={botToken}
                 onChange={(e) => setBotToken(e.target.value)}
-                placeholder={status.configured ? 'Deixe vazio para manter atual' : '123456789:ABCdefGHIjklMNOpqrSTUvwxYZ'}
+                placeholder="123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
                 className="w-full bg-background-secondary border border-border rounded px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none placeholder:text-foreground-muted/50"
               />
-            </div>
-
-            {/* Chat ID */}
-            <div className="mb-4">
-              <label className="text-xs text-foreground-muted block mb-1">
-                {status.configured ? 'Novo ID do Grupo/Chat' : 'ID do Grupo/Chat'}
-                <span className="text-foreground-muted ml-1">(use @userinfobot)</span>
-              </label>
-              <input
-                type="text"
-                autoComplete="off"
-                value={chatId}
-                onChange={(e) => setChatId(e.target.value)}
-                placeholder={status.configured ? 'Deixe vazio para manter atual' : '-1001234567890'}
-                className="w-full bg-background-secondary border border-border rounded px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none placeholder:text-foreground-muted/50"
-              />
-              <p className="text-xs text-foreground-muted mt-1">
-                💡 Grupos têm ID negativo (ex: -1001234567890)
-              </p>
             </div>
           </form>
 
@@ -208,10 +160,10 @@ export function TelegramConfig() {
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              disabled={isSaving || !botToken.trim() || !chatId.trim()}
+              disabled={isSaving || !botToken.trim()}
               className="flex-1 py-2 px-4 rounded-lg bg-accent-blue text-white font-medium text-sm hover:bg-accent-blue/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              {isSaving ? 'Salvando...' : 'Salvar Token'}
             </button>
             <button
               onClick={handleTest}
@@ -229,10 +181,23 @@ export function TelegramConfig() {
             </p>
             <ol className="text-xs text-foreground-muted mt-2 space-y-1 list-decimal list-inside">
               <li>Crie um bot no @BotFather e copie o token</li>
-              <li>Adicione o bot ao seu grupo</li>
-              <li>Use @userinfobot para obter o ID do grupo</li>
-              <li>Cole as informações acima e salve</li>
+              <li>Cole o token acima e salve</li>
+              <li>Configure os grupos em cada estratégia (clique para expandir)</li>
             </ol>
+            
+            {groupCount > 0 && (
+              <div className="mt-3 pt-3 border-t border-border/50">
+                <p className="text-xs text-foreground-muted mb-2">📋 Grupos configurados:</p>
+                <div className="space-y-1">
+                  {Object.entries(status.strategy_groups || {}).map(([strategy, chatId]) => (
+                    <div key={strategy} className="flex justify-between text-xs">
+                      <span className="text-foreground">{strategy}</span>
+                      <code className="text-foreground-muted">{chatId}</code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

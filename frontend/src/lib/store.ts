@@ -39,10 +39,6 @@ export interface Config {
     harsi_len: number;
     harsi_smooth: number;
   };
-  combo: {
-    require_ema50: boolean;
-    confirm_window: number;
-  };
 }
 
 interface SignalStore {

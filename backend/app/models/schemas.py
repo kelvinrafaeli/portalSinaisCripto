@@ -10,7 +10,6 @@ from enum import Enum
 class StrategyType(str, Enum):
     RSI = "RSI"
     MACD = "MACD"
-    COMBO = "COMBO"
     GCM = "GCM"
 
 
@@ -83,7 +82,6 @@ class AlertConfigBase(BaseModel):
     name: str = "default"
     use_rsi: bool = True
     use_macd: bool = True
-    use_combo: bool = True
     use_gcm: bool = True
     
     rsi_period: int = 14
@@ -98,7 +96,6 @@ class AlertConfigBase(BaseModel):
     harsi_len: int = 10
     harsi_smooth: int = 5
     
-    combo_require_ema50: bool = True
     confirm_window: int = 6
     
     symbols: List[str] = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
@@ -114,7 +111,6 @@ class AlertConfigUpdate(BaseModel):
     name: Optional[str] = None
     use_rsi: Optional[bool] = None
     use_macd: Optional[bool] = None
-    use_combo: Optional[bool] = None
     use_gcm: Optional[bool] = None
     rsi_period: Optional[int] = None
     rsi_signal: Optional[int] = None
