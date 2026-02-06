@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: portal_sinais_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: portal_sinais
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-portal_sinais}
     ports:
       - "5432:5432"
     volumes:
@@ -23,6 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: portal_sinais_redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
       - "6379:6379"
     volumes:
@@ -42,8 +43,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/portal_sinais
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-portal_sinais}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - API_HOST=0.0.0.0
       - API_PORT=8000
       - DEBUG=true
