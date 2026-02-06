@@ -151,10 +151,14 @@ export function CryptoSummaryCard() {
         <>
           {/* Progress Bar */}
           <div className="relative mt-4">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-background/40">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-background/40 flex">
               <div
                 className="h-full bg-long"
                 style={{ width: `${summary.positive_pct.toFixed(1)}%` }}
+              />
+              <div
+                className="h-full bg-short"
+                style={{ width: `${summary.negative_pct.toFixed(1)}%` }}
               />
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-foreground-muted">
