@@ -9,6 +9,7 @@ interface TelegramStatus {
   masked_token?: string;
   masked_chat_id?: string;
   strategy_groups?: Record<string, string>;
+  masked_summary_group?: string;
 }
 
 export function TelegramConfig() {
@@ -18,6 +19,8 @@ export function TelegramConfig() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [summaryGroup, setSummaryGroup] = useState('');
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
 
   useEffect(() => {
     loadStatus();
@@ -84,6 +87,28 @@ export function TelegramConfig() {
   };
 
   const groupCount = Object.keys(status.strategy_groups || {}).length;
+  const summaryConfigured = Boolean(status.masked_summary_group);
+
+  const handleSaveSummaryGroup = async () => {
+    if (!summaryGroup.trim()) {
+      setMessage({ type: 'error', text: 'Informe o ID do grupo de resumo' });
+      return;
+    }
+
+    setIsSavingSummary(true);
+    setMessage(null);
+
+    try {
+      await api.configureSummaryGroup(summaryGroup.trim());
+      await loadStatus();
+      setMessage({ type: 'success', text: 'Grupo de resumo configurado!' });
+      setSummaryGroup('');
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Erro ao configurar grupo de resumo' });
+    } finally {
+      setIsSavingSummary(false);
+    }
+  };
 
   return (
     <div className="mb-6">
@@ -174,6 +199,33 @@ export function TelegramConfig() {
             </button>
           </div>
 
+          {/* Grupo do resumo */}
+          <div className="pt-3 border-t border-border">
+            <p className="text-xs text-foreground-muted mb-2">📊 Grupo do resumo 1H (CryptoBubbles)</p>
+            {summaryConfigured && status.masked_summary_group && (
+              <div className="text-xs text-foreground-muted mb-2">
+                Atual: <code className="bg-background-tertiary px-1 rounded">{status.masked_summary_group}</code>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                autoComplete="off"
+                value={summaryGroup}
+                onChange={(e) => setSummaryGroup(e.target.value)}
+                placeholder="-1001234567890"
+                className="flex-1 bg-background-secondary border border-border rounded px-3 py-2 text-sm text-foreground focus:border-accent-blue focus:outline-none placeholder:text-foreground-muted/50"
+              />
+              <button
+                onClick={handleSaveSummaryGroup}
+                disabled={isSavingSummary || !summaryGroup.trim()}
+                className="px-4 py-2 rounded-lg bg-background-tertiary text-foreground text-sm hover:bg-background-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSavingSummary ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+
           {/* Instruções */}
           <div className="pt-3 border-t border-border">
             <p className="text-xs text-foreground-muted">
@@ -183,6 +235,7 @@ export function TelegramConfig() {
               <li>Crie um bot no @BotFather e copie o token</li>
               <li>Cole o token acima e salve</li>
               <li>Configure os grupos em cada estratégia (clique para expandir)</li>
+              <li>Defina um grupo para o resumo 1H do CryptoBubbles (opcional)</li>
             </ol>
             
             {groupCount > 0 && (

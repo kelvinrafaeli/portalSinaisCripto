@@ -21,7 +21,7 @@ export default function Home() {
         <div className="flex-1 flex overflow-hidden">
           {/* Feed de sinais - área principal com scroll */}
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-4xl">
+            <div className="w-full">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-foreground">
                   Feed de Sinais

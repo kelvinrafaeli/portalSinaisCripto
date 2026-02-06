@@ -28,14 +28,14 @@ CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 STRATEGY_TIMEFRAMES_FILE = os.path.join(CONFIG_DIR, "strategy_timeframes.json")
 
 DEFAULT_STRATEGY_TIMEFRAMES = {
-    "GCM": ["15m", "1h", "4h"],
-    "RSI": ["5m", "15m", "1h"],
-    "MACD": ["15m", "1h", "4h"],
-    "RSI_EMA50": ["5m", "15m", "1h"],
+    "GCM": ["1h"],
+    "RSI": ["1h"],
+    "MACD": ["1h"],
+    "RSI_EMA50": ["1h"],
     "SCALPING": ["3m", "5m"],
-    "SWING_TRADE": ["1h", "4h", "1d"],
-    "DAY_TRADE": ["15m", "30m", "1h"],
-    "JFN": ["15m", "1h", "4h"]
+    "SWING_TRADE": ["1d"],
+    "DAY_TRADE": ["15m"],
+    "JFN": ["1h"]
 }
 
 
@@ -71,6 +71,7 @@ class SignalEngine:
         self.is_running = False
         self._task: Optional[asyncio.Task] = None
         self._signal_callbacks: List[Callable] = []
+        self._last_summary_bucket: Optional[int] = None
         
         # Timeframes por estratégia (configurável)
         self.strategy_timeframes: Dict[str, List[str]] = {}
@@ -468,6 +469,7 @@ class SignalEngine:
         while self.is_running:
             try:
                 await self.run_analysis_cycle()
+                await self._maybe_send_summary()
                 
                 # Aguardar intervalo configurado
                 await asyncio.sleep(self.settings.worker_interval_seconds)
@@ -479,6 +481,66 @@ class SignalEngine:
                 await asyncio.sleep(10)  # Retry delay
         
         logger.info("Signal Engine worker stopped")
+
+    async def _maybe_send_summary(self):
+        """Envia resumo CryptoBubbles 1h a cada 15 minutos"""
+        if not telegram_service.is_enabled:
+            return
+
+        summary_chat = telegram_service.get_summary_group()
+        if not summary_chat:
+            return
+
+        now = datetime.now(timezone.utc)
+        bucket = int(now.timestamp() // 900)  # 15 minutos
+        if self._last_summary_bucket == bucket:
+            return
+
+        summary = await cryptobubbles_service.get_summary_1h(
+            exclude_stablecoins=self.settings.cryptobubbles_exclude_stablecoins,
+            min_volume=self.settings.cryptobubbles_min_volume
+        )
+
+        positive_pct = summary.get("positive_pct", 0)
+        negative_pct = summary.get("negative_pct", 0)
+        positives = summary.get("positives", 0)
+        negatives = summary.get("negatives", 0)
+        total = summary.get("total", 0)
+        top_5 = summary.get("top_5_abs", [])
+
+        bias_up = positive_pct >= negative_pct
+        bias_emoji = "🟢" if bias_up else "🔴"
+        bias_sign = "+" if bias_up else "-"
+
+        lines = [
+            f"📊 RESUMO CRIPTO 1H {bias_emoji} {bias_sign}",
+            "",
+            f"{positive_pct:.1f}% positivas / {negative_pct:.1f}% negativas",
+            "",
+            f"Analisadas: {total}",
+            f"Positivas: {positives} | Negativas: {negatives}",
+            "",
+            "TOP 5 (variacao absoluta)",
+        ]
+
+        for idx, item in enumerate(top_5, start=1):
+            symbol = item.get("symbol", "")
+            change = item.get("change", 0)
+            sign = "+" if change >= 0 else ""
+            lines.append(f"{idx}. {symbol} {sign}{change:.1f}%")
+
+        message = "\n".join(lines)
+
+        try:
+            sent = await telegram_service.send_message(
+                message,
+                chat_id=summary_chat,
+                include_disclaimer=True
+            )
+            if sent:
+                self._last_summary_bucket = bucket
+        except Exception as e:
+            logger.error(f"Error sending summary to Telegram: {e}")
     
     async def start(self):
         """Inicia o worker em background"""

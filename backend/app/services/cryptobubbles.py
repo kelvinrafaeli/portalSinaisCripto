@@ -262,6 +262,58 @@ class CryptoBubblesService:
         
         logger.info(f"Selected {len(symbols)} top volatile symbols from CryptoBubbles")
         return symbols
+
+    async def get_summary_1h(
+        self,
+        exclude_stablecoins: bool = True,
+        min_volume: float = 0,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Retorna um resumo das variacoes em 1h.
+        """
+        coins = await self.fetch_all_coins(force_refresh)
+
+        filtered: List[CryptoBubblesCoin] = []
+        for coin in coins:
+            if not coin.binance_symbol:
+                continue
+            if exclude_stablecoins and coin.stable:
+                continue
+            if coin.volume < min_volume:
+                continue
+            filtered.append(coin)
+
+        total = len(filtered)
+        positives = [c for c in filtered if c.performance_hour > 0]
+        negatives = [c for c in filtered if c.performance_hour < 0]
+
+        pos_count = len(positives)
+        neg_count = len(negatives)
+        pos_pct = (pos_count / total * 100) if total else 0
+        neg_pct = (neg_count / total * 100) if total else 0
+
+        top_abs = sorted(
+            filtered,
+            key=lambda c: abs(c.performance_hour),
+            reverse=True
+        )[:5]
+
+        return {
+            "timeframe": "1h",
+            "total": total,
+            "positives": pos_count,
+            "negatives": neg_count,
+            "positive_pct": round(pos_pct, 1),
+            "negative_pct": round(neg_pct, 1),
+            "top_5_abs": [
+                {
+                    "symbol": c.symbol,
+                    "change": round(c.performance_hour, 1)
+                }
+                for c in top_abs
+            ]
+        }
     
     async def get_top_gainers(
         self,

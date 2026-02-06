@@ -20,14 +20,14 @@ const TIMEFRAMES = ['3m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
 // Timeframes padrão por estratégia
 const DEFAULT_STRATEGY_TIMEFRAMES: Record<string, string[]> = {
-  'GCM': ['15m', '1h', '4h'],
-  'RSI': ['15m', '1h', '4h'],
-  'MACD': ['15m', '1h', '4h'],
-  'RSI_EMA50': ['1h', '4h'],
+  'GCM': ['1h'],
+  'RSI': ['1h'],
+  'MACD': ['1h'],
+  'RSI_EMA50': ['1h'],
   'SCALPING': ['3m', '5m'],
-  'SWING_TRADE': ['4h', '1d'],
-  'DAY_TRADE': ['15m', '1h'],
-  'JFN': ['15m', '1h', '4h'],
+  'SWING_TRADE': ['1d'],
+  'DAY_TRADE': ['15m'],
+  'JFN': ['1h'],
 };
 
 const DEFAULT_STRATEGY_PARAMS: Record<string, Record<string, number | boolean>> = {
@@ -54,6 +54,11 @@ export function Sidebar() {
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [testingGroup, setTestingGroup] = useState<string | null>(null);
   const [savingParams, setSavingParams] = useState<string | null>(null);
+  const [summaryGroupInput, setSummaryGroupInput] = useState('');
+  const [summaryGroupMasked, setSummaryGroupMasked] = useState('');
+  const [summaryGroupOpen, setSummaryGroupOpen] = useState(false);
+  const [summarySaving, setSummarySaving] = useState(false);
+  const [summaryEnabled, setSummaryEnabled] = useState(false);
   
   const engineRunning = useSignalStore((state) => state.engineRunning);
   const setEngineRunning = useSignalStore((state) => state.setEngineRunning);
@@ -86,6 +91,12 @@ export function Sidebar() {
     // Carregar grupos de Telegram por estratégia
     api.getStrategyGroups().then((data) => {
       setStrategyGroups(data.groups || {});
+    }).catch(console.error);
+
+    // Carregar grupo do resumo CryptoBubbles
+    api.getTelegramStatus().then((data) => {
+      setSummaryGroupMasked(data.masked_summary_group || '');
+      setSummaryEnabled(Boolean(data.masked_summary_group));
     }).catch(console.error);
   }, [setEngineRunning]);
 
@@ -127,6 +138,47 @@ export function Sidebar() {
       console.error('Erro ao testar grupo:', error);
     } finally {
       setTestingGroup(null);
+    }
+  };
+
+  const handleSaveSummaryGroup = async () => {
+    const chatId = summaryGroupInput.trim();
+    if (!chatId) return;
+
+    setSummarySaving(true);
+    try {
+      const response = await api.configureSummaryGroup(chatId);
+      setSummaryGroupMasked(response?.summary_group || chatId);
+      setSummaryGroupInput('');
+      setSummaryEnabled(true);
+    } catch (error) {
+      console.error('Erro ao salvar grupo do resumo:', error);
+    } finally {
+      setSummarySaving(false);
+    }
+  };
+
+  const handleToggleSummaryGroup = async () => {
+    const isEnabled = summaryEnabled;
+    if (isEnabled) {
+      setSummarySaving(true);
+      try {
+        await api.configureSummaryGroup('');
+        setSummaryGroupMasked('');
+        setSummaryEnabled(false);
+      } catch (error) {
+        console.error('Erro ao desativar grupo do resumo:', error);
+      } finally {
+        setSummarySaving(false);
+      }
+      return;
+    }
+
+    setSummaryEnabled(true);
+    if (summaryGroupInput.trim()) {
+      await handleSaveSummaryGroup();
+    } else {
+      setSummaryGroupOpen(true);
     }
   };
 
@@ -684,6 +736,70 @@ export function Sidebar() {
                 )}
               </div>
             ))}
+
+            {/* CryptoBubbles Summary */}
+            <div className="rounded overflow-hidden">
+              <div className="flex items-center gap-2 p-2 hover:bg-background-tertiary">
+                <input
+                  type="checkbox"
+                  checked={summaryEnabled}
+                  onChange={handleToggleSummaryGroup}
+                  className="w-4 h-4 rounded border-border bg-background accent-long"
+                />
+                <button
+                  onClick={() => setSummaryGroupOpen((prev) => !prev)}
+                  className="flex-1 flex items-center justify-between text-left"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm text-foreground">CryptoBubbles</span>
+                    <span className="text-xs text-foreground-muted">Resumo 1H • a cada 15m</span>
+                  </div>
+                  <svg
+                    className={`w-4 h-4 text-foreground-muted transition-transform ${summaryGroupOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {summaryGroupOpen && (
+                <div className="px-2 pb-2 pt-1 bg-background rounded-b space-y-3">
+                  <div className="px-2 py-2 rounded bg-accent-blue/10 text-accent-blue text-xs">
+                    Envia o resumo do CryptoBubbles a cada 15 minutos.
+                  </div>
+
+                  <div className="pt-2 border-t border-border/50">
+                    <p className="text-xs text-foreground-muted mb-2">📱 Grupo Telegram:</p>
+                    {summaryGroupMasked && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <code className="flex-1 text-xs bg-background-tertiary px-2 py-1 rounded text-foreground">
+                          {summaryGroupMasked}
+                        </code>
+                      </div>
+                    )}
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={summaryGroupInput}
+                        onChange={(e) => setSummaryGroupInput(e.target.value)}
+                        placeholder="-1001234567890"
+                        className="flex-1 bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground focus:border-accent-blue focus:outline-none placeholder:text-foreground-muted/50"
+                      />
+                      <button
+                        onClick={handleSaveSummaryGroup}
+                        disabled={summarySaving || !summaryGroupInput.trim()}
+                        className="px-2 py-1 text-xs bg-accent-blue text-white rounded hover:bg-accent-blue/90 disabled:opacity-50"
+                      >
+                        {summarySaving ? '...' : '✓'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
         

@@ -120,6 +120,7 @@ class ApiClient {
       masked_token?: string; 
       masked_chat_id?: string;
       strategy_groups?: Record<string, string>;
+      masked_summary_group?: string;
     }>('/telegram/status');
   }
 
@@ -155,6 +156,13 @@ class ApiClient {
         include_disclaimer: false,
         strategy: strategy || null
       }),
+    });
+  }
+
+  async configureSummaryGroup(chatId: string) {
+    return this.request('/telegram/summary-group', {
+      method: 'POST',
+      body: JSON.stringify({ chat_id: chatId }),
     });
   }
 
@@ -212,6 +220,18 @@ class ApiClient {
     return this.request<{ count: number; symbols: string[] }>(
       `/cryptobubbles/top-volatile?limit=${limit}`
     );
+  }
+
+  async getCryptoBubblesSummary1h() {
+    return this.request<{
+      timeframe: string;
+      total: number;
+      positives: number;
+      negatives: number;
+      positive_pct: number;
+      negative_pct: number;
+      top_5_abs: Array<{ symbol: string; change: number }>;
+    }>('/cryptobubbles/summary-1h');
   }
 }
 

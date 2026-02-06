@@ -24,6 +24,11 @@ class StrategyGroupConfig(BaseModel):
     chat_id: str
 
 
+class SummaryGroupConfig(BaseModel):
+    """Configuração de grupo para resumo"""
+    chat_id: str
+
+
 class TestMessage(BaseModel):
     """Mensagem de teste"""
     message: str = "🚀 Portal Sinais - Teste de conexão!"
@@ -59,13 +64,23 @@ async def get_telegram_status():
             masked_groups[strategy] = chat_id[:4] + "..." + chat_id[-3:]
         else:
             masked_groups[strategy] = chat_id
+
+    summary_group = telegram_service.get_summary_group()
+    if summary_group:
+        if len(summary_group) > 6:
+            masked_summary = summary_group[:4] + "..." + summary_group[-3:]
+        else:
+            masked_summary = summary_group
+    else:
+        masked_summary = ""
     
     return {
         "enabled": telegram_service.is_enabled,
         "configured": bool(telegram_service.bot_token),
         "masked_token": masked_token,
         "masked_chat_id": masked_chat,
-        "strategy_groups": masked_groups
+        "strategy_groups": masked_groups,
+        "masked_summary_group": masked_summary
     }
 
 
@@ -110,6 +125,17 @@ async def remove_strategy_group(strategy: str):
     return {
         "status": "removed",
         "strategy": strategy.upper()
+    }
+
+
+@router.post("/summary-group")
+async def configure_summary_group(config: SummaryGroupConfig):
+    """Configura grupo para envio do resumo CryptoBubbles"""
+    telegram_service.configure_summary_group(config.chat_id)
+
+    return {
+        "status": "configured",
+        "summary_group": config.chat_id[:4] + "..." if len(config.chat_id) > 4 else config.chat_id
     }
 
 

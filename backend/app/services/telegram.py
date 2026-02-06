@@ -43,6 +43,7 @@ class TelegramService:
         self.bot_token = bot_token
         self.chat_id = chat_id  # Chat padrão (fallback)
         self.strategy_groups: Dict[str, str] = {}  # Mapeamento estratégia -> chat_id
+        self.summary_group: str = ""  # Grupo para resumo CryptoBubbles
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self._enabled = bool(bot_token and chat_id)
         
@@ -58,6 +59,7 @@ class TelegramService:
                     self.bot_token = config.get('bot_token', '')
                     self.chat_id = config.get('chat_id', '')
                     self.strategy_groups = config.get('strategy_groups', {})
+                    self.summary_group = config.get('summary_group', '')
                     self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
                     self._enabled = bool(self.bot_token)
                     if self._enabled:
@@ -75,7 +77,8 @@ class TelegramService:
                 json.dump({
                     'bot_token': self.bot_token,
                     'chat_id': self.chat_id,
-                    'strategy_groups': self.strategy_groups
+                    'strategy_groups': self.strategy_groups,
+                    'summary_group': self.summary_group
                 }, f, indent=2)
             logger.info("Telegram configuration saved to file")
         except Exception as e:
@@ -101,6 +104,16 @@ class TelegramService:
             self.strategy_groups.pop(strategy.upper(), None)
         self._save_config()
         logger.info(f"Strategy {strategy} configured with chat_id: {chat_id}")
+
+    def configure_summary_group(self, chat_id: str):
+        """Configura grupo para resumo CryptoBubbles"""
+        self.summary_group = chat_id or ""
+        self._save_config()
+        logger.info("Summary group configured")
+
+    def get_summary_group(self) -> str:
+        """Retorna o chat_id do grupo de resumo"""
+        return self.summary_group
     
     def get_strategy_group(self, strategy: str) -> Optional[str]:
         """Retorna o chat_id configurado para uma estratégia"""

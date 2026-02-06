@@ -25,6 +25,18 @@ async def get_summary():
     return await cryptobubbles_service.get_summary()
 
 
+@router.get("/summary-1h")
+async def get_summary_1h():
+    """
+    Retorna um resumo das variacoes em 1h.
+    """
+    settings = get_settings()
+    return await cryptobubbles_service.get_summary_1h(
+        exclude_stablecoins=settings.cryptobubbles_exclude_stablecoins,
+        min_volume=settings.cryptobubbles_min_volume
+    )
+
+
 @router.get("/top-volatile")
 async def get_top_volatile(
     limit: int = Query(default=100, ge=1, le=500, description="Quantidade de pares"),
