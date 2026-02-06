@@ -147,8 +147,8 @@ export function Sidebar() {
 
     setSummarySaving(true);
     try {
-      const response = await api.configureSummaryGroup(chatId);
-      setSummaryGroupMasked(response?.summary_group || chatId);
+      await api.configureSummaryGroup(chatId);
+      setSummaryGroupMasked(chatId);
       setSummaryGroupInput('');
       setSummaryEnabled(true);
     } catch (error) {
