@@ -176,9 +176,16 @@ class TelegramService:
             indicator_lines.append(f"MACD: {signal.macd:.4f} | Signal: {signal.macd_signal:.4f}")
         elif strategy == "RSI_EMA50":
             if signal.rsi is not None:
-                indicator_lines.append(f"RSI: {signal.rsi:.2f}")
+                rsi_line = f"RSI: {signal.rsi:.2f}"
+                if "rsi_oversold" in raw and "rsi_overbought" in raw:
+                    rsi_line += f" (min {raw['rsi_oversold']} / max {raw['rsi_overbought']})"
+                indicator_lines.append(rsi_line)
             if signal.ema50 is not None:
                 indicator_lines.append(f"EMA50: {signal.ema50:.4f}")
+            if raw.get("rsi_state") == "overbought":
+                indicator_lines.append("RSI acima do maximo ⚠️")
+            elif raw.get("rsi_state") == "oversold":
+                indicator_lines.append("RSI abaixo do minimo ⚠️")
         elif strategy == "SCALPING":
             if signal.rsi is not None:
                 indicator_lines.append(f"RSI: {signal.rsi:.2f}")

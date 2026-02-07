@@ -160,6 +160,12 @@ export function CryptoSummaryCard() {
                 className="h-full bg-short"
                 style={{ width: `${summary.negative_pct.toFixed(1)}%` }}
               />
+              {neutralPct > 0 && (
+                <div
+                  className="h-full bg-foreground-muted/60"
+                  style={{ width: `${neutralPct.toFixed(1)}%` }}
+                />
+              )}
             </div>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-foreground-muted">
               <span className="rounded-full border border-border bg-background/40 px-2 py-0.5">

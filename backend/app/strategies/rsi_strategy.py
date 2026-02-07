@@ -76,52 +76,39 @@ class RSIStrategy(BaseStrategy):
         direction = None
         message = ""
         
+        # LONG: RSI cruzou pra cima E estava/está na zona de sobrevenda (abaixo do oversold)
         if cross_up:
-            # Filtro EMA50 para LONG
-            if not self.use_ema_filter or last_close > last_ema50:
-                direction = "LONG"
-                message = (
-                    f"🟢 RSI CROSS UP\n"
-                    f"Símbolo: {symbol}\n"
-                    f"Timeframe: {timeframe}\n"
-                    f"RSI({self.period}): {rsi_curr:.2f}\n"
-                    f"Média({self.signal_period}): {sig_curr:.2f}\n"
-                    f"Preço > EMA50 ✓" if self.use_ema_filter else ""
-                )
+            # Verificar se RSI saiu da zona de sobrevenda (estava abaixo ou perto do oversold)
+            if rsi_prev <= self.oversold or rsi_curr <= self.oversold + 5:
+                # Filtro EMA50 para LONG
+                if not self.use_ema_filter or last_close > last_ema50:
+                    direction = "LONG"
+                    message = (
+                        f"🟢 RSI CROSS UP (saindo de sobrevenda)\n"
+                        f"Símbolo: {symbol}\n"
+                        f"Timeframe: {timeframe}\n"
+                        f"RSI({self.period}): {rsi_curr:.2f}\n"
+                        f"Média({self.signal_period}): {sig_curr:.2f}\n"
+                        f"Nível oversold: {self.oversold}\n"
+                        f"Preço > EMA50 ✓" if self.use_ema_filter else ""
+                    )
         
+        # SHORT: RSI cruzou pra baixo E estava/está na zona de sobrecompra (acima do overbought)
         elif cross_down:
-            # Filtro EMA50 para SHORT
-            if not self.use_ema_filter or last_close < last_ema50:
-                direction = "SHORT"
-                message = (
-                    f"🔴 RSI CROSS DOWN\n"
-                    f"Símbolo: {symbol}\n"
-                    f"Timeframe: {timeframe}\n"
-                    f"RSI({self.period}): {rsi_curr:.2f}\n"
-                    f"Média({self.signal_period}): {sig_curr:.2f}\n"
-                    f"Preço < EMA50 ✓" if self.use_ema_filter else ""
-                )
-        
-        # Alertas de sobrecompra/sobrevenda
-        if direction is None:
-            if rsi_curr >= self.overbought:
-                direction = "SHORT"
-                message = (
-                    f"⚠️ RSI OVERBOUGHT\n"
-                    f"Símbolo: {symbol}\n"
-                    f"Timeframe: {timeframe}\n"
-                    f"RSI({self.period}): {rsi_curr:.2f}\n"
-                    f"Possível reversão de baixa"
-                )
-            elif rsi_curr <= self.oversold:
-                direction = "LONG"
-                message = (
-                    f"⚠️ RSI OVERSOLD\n"
-                    f"Símbolo: {symbol}\n"
-                    f"Timeframe: {timeframe}\n"
-                    f"RSI({self.period}): {rsi_curr:.2f}\n"
-                    f"Possível reversão de alta"
-                )
+            # Verificar se RSI saiu da zona de sobrecompra (estava acima ou perto do overbought)
+            if rsi_prev >= self.overbought or rsi_curr >= self.overbought - 5:
+                # Filtro EMA50 para SHORT
+                if not self.use_ema_filter or last_close < last_ema50:
+                    direction = "SHORT"
+                    message = (
+                        f"🔴 RSI CROSS DOWN (saindo de sobrecompra)\n"
+                        f"Símbolo: {symbol}\n"
+                        f"Timeframe: {timeframe}\n"
+                        f"RSI({self.period}): {rsi_curr:.2f}\n"
+                        f"Média({self.signal_period}): {sig_curr:.2f}\n"
+                        f"Nível overbought: {self.overbought}\n"
+                        f"Preço < EMA50 ✓" if self.use_ema_filter else ""
+                    )
         
         if direction:
             return SignalResult(

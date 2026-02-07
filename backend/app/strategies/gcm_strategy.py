@@ -184,9 +184,11 @@ class GCMStrategy(BaseStrategy):
         rsi_bull = rsi_rising and not rsi_rising_prev
         rsi_bear = not rsi_rising and rsi_rising_prev
 
-        # Apenas alertas quando a bolinha esta em -20 (buy) ou 20 (sell)
-        rsi_bull_allowed = rsi_bull and rsi_prev <= self.rsi_buy_level
-        rsi_bear_allowed = rsi_bear and rsi_prev >= self.rsi_sell_level
+        # Apenas alertas quando cruza os niveis configurados
+        rsi_cross_buy = rsi_prev <= self.rsi_buy_level and rsi_curr >= self.rsi_buy_level
+        rsi_cross_sell = rsi_prev >= self.rsi_sell_level and rsi_curr <= self.rsi_sell_level
+        rsi_bull_allowed = rsi_bull and rsi_cross_buy
+        rsi_bear_allowed = rsi_bear and rsi_cross_sell
         
         last_close = df['close'].iloc[-1]
         direction = None
@@ -215,10 +217,15 @@ class GCMStrategy(BaseStrategy):
                 direction=direction,
                 price=last_close,
                 message=message,
-                rsi=round(rsi_prev, 2),
+                rsi=round(rsi_curr, 2),
                 ema50=round(ema50, 2) if not pd.isna(ema50) else None,
                 raw_data={
-                    "rsi_fast": round(rsi_prev, 4),
+                    "rsi_fast": round(rsi_curr, 4),
+                    "rsi_prev": round(rsi_prev, 4),
+                    "rsi_buy_level": self.rsi_buy_level,
+                    "rsi_sell_level": self.rsi_sell_level,
+                    "rsi_cross_buy": rsi_cross_buy,
+                    "rsi_cross_sell": rsi_cross_sell,
                     "rsi_bull": rsi_bull,
                     "rsi_bear": rsi_bear
                 }

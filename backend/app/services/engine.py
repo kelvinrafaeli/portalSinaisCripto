@@ -121,7 +121,10 @@ class SignalEngine:
             ),
             "RSI_EMA50": RsiEma50Strategy(
                 rsi_period=settings.rsi_period,
-                rsi_signal=settings.rsi_signal
+                rsi_signal=settings.rsi_signal,
+                rsi_overbought=settings.rsi_overbought,
+                rsi_oversold=settings.rsi_oversold,
+                ema_period=50
             ),
             "JFN": JFNStrategy()
         }

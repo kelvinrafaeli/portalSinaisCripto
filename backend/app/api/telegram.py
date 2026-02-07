@@ -2,7 +2,7 @@
 Portal Alertas - Telegram API Routes
 Configuração e teste de integração Telegram.
 Suporta grupos individuais por estratégia.
-""
+"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict

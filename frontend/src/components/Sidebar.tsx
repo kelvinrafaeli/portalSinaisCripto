@@ -34,7 +34,7 @@ const DEFAULT_STRATEGY_PARAMS: Record<string, Record<string, number | boolean>> 
   RSI: { period: 14, signal_period: 9, overbought: 70, oversold: 30, use_ema_filter: true },
   MACD: { fast_period: 12, slow_period: 26, signal_period: 9 },
   GCM: { harsi_length: 10, harsi_smooth: 5, rsi_length: 7, rsi_mode: true, rsi_buy_level: -20, rsi_sell_level: 20 },
-  RSI_EMA50: { rsi_period: 14, rsi_signal: 9, ema_period: 50 },
+  RSI_EMA50: { rsi_period: 14, rsi_signal: 9, ema_period: 50, rsi_overbought: 80, rsi_oversold: 20 },
   SCALPING: { ema_fast: 9, ema_slow: 50, rsi_period: 14, rsi_neutral: 50 },
   SWING_TRADE: { harsi_len: 14, harsi_smooth: 7, ema_filter: 100 },
   DAY_TRADE: { macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_period: 14, rsi_ma_period: 9, confirm_window: 6 },
@@ -315,7 +315,7 @@ export function Sidebar() {
         );
       case 'RSI_EMA50':
         return (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
               <input
@@ -340,6 +340,24 @@ export function Sidebar() {
                 type="number"
                 value={Number(params.ema_period)}
                 onChange={(e) => updateStrategyParam('RSI_EMA50', 'ema_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Overbought</label>
+              <input
+                type="number"
+                value={Number(params.rsi_overbought)}
+                onChange={(e) => updateStrategyParam('RSI_EMA50', 'rsi_overbought', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Oversold</label>
+              <input
+                type="number"
+                value={Number(params.rsi_oversold)}
+                onChange={(e) => updateStrategyParam('RSI_EMA50', 'rsi_oversold', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
@@ -574,7 +592,7 @@ export function Sidebar() {
   const gcmParams = strategyParams.GCM || DEFAULT_STRATEGY_PARAMS.GCM;
 
   return (
-    <aside className="w-72 bg-background-secondary border-r border-border h-screen overflow-y-auto">
+    <aside className="w-full lg:w-72 bg-background-secondary border-r border-border lg:h-screen overflow-y-auto">
       <div className="p-4">
         <h1 className="text-xl font-bold text-foreground mb-1">Portal Alertas</h1>
         <p className="text-xs text-foreground-muted mb-6">Trading Alerts Dashboard</p>
