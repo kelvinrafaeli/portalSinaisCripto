@@ -1,118 +1,101 @@
 """
 Portal Sinais - Estratégia Swing Trade
-Baseada em GCM com filtros adicionais para operações mais longas.
-Ideal para timeframes de 1h e 4h.
+Confluência de cruzamento RSI + MACD.
 """
 from typing import Optional
 import pandas as pd
-import numpy as np
 
 from app.strategies.base import BaseStrategy, SignalResult
 
 
 class SwingTradeStrategy(BaseStrategy):
     """
-    Estratégia de Swing Trade baseada em:
-    - GCM Heikin Ashi RSI Trend Cloud
-    - Análise de tendência de longo prazo
-    - Ideal para operações de dias/semanas
-    
-    Usa Heikin Ashi RSI para identificar mudanças de tendência
-    mais significativas.
+    Swing Trade:
+    - LONG: MACD cruza para cima e RSI cruza para cima
+    - SHORT: MACD cruza para baixo e RSI cruza para baixo
     """
-    
+
     def __init__(self, **params):
         super().__init__(**params)
-        self.harsi_len = params.get("harsi_len", 14)  # Maior para swing
-        self.harsi_smooth = params.get("harsi_smooth", 7)  # Maior suavização
-        self.ema_filter = params.get("ema_filter", 100)  # EMA 100 como filtro
+        self.macd_fast = params.get("macd_fast", 12)
+        self.macd_slow = params.get("macd_slow", 26)
+        self.macd_signal = params.get("macd_signal", 9)
+        self.rsi_period = params.get("rsi_period", 14)
+        self.rsi_signal = params.get("rsi_signal", 9)
         self.name = "SWING_TRADE"
-    
-    def _heikin_ashi_rsi(
-        self, 
-        closes: pd.Series, 
-        length: int, 
-        smooth: int
-    ) -> pd.Series:
-        """
-        Calcula Heikin Ashi RSI.
-        """
-        rsi = self.rsi_wilder(closes, length)
-        
-        # Suavização com EMA
-        smoothed_rsi = self.ema(rsi, smooth)
-        
-        # Normalizar para comportamento Heikin Ashi
-        ha_rsi = pd.Series(index=closes.index, dtype=float)
-        
-        for i in range(len(closes)):
-            if i == 0 or pd.isna(smoothed_rsi.iloc[i]):
-                ha_rsi.iloc[i] = smoothed_rsi.iloc[i] if not pd.isna(smoothed_rsi.iloc[i]) else 50
-            else:
-                prev = ha_rsi.iloc[i-1] if not pd.isna(ha_rsi.iloc[i-1]) else 50
-                curr = smoothed_rsi.iloc[i]
-                ha_rsi.iloc[i] = (prev + curr) / 2
-        
-        return ha_rsi
-    
+
+    def _calculate_macd(self, closes: pd.Series) -> tuple:
+        ema_fast = self.ema(closes, self.macd_fast)
+        ema_slow = self.ema(closes, self.macd_slow)
+        macd_line = ema_fast - ema_slow
+        signal_line = self.ema(macd_line, self.macd_signal)
+        return macd_line, signal_line
+
     def analyze(
-        self, 
-        df: pd.DataFrame, 
-        symbol: str, 
+        self,
+        df: pd.DataFrame,
+        symbol: str,
         timeframe: str
     ) -> Optional[SignalResult]:
-        """
-        Analisa tendência para Swing Trade.
-        """
-        if not self.validate_dataframe(df, min_rows=120):
+        if not self.validate_dataframe(df, min_rows=80):
             return None
-        
-        closes = df['close']
-        
-        # Calcular indicadores
-        ha_rsi = self._heikin_ashi_rsi(closes, self.harsi_len, self.harsi_smooth)
-        ema_filter = self.ema(closes, self.ema_filter)
-        
-        # Valores atuais
-        current_ha_rsi = ha_rsi.iloc[-1]
-        prev_ha_rsi = ha_rsi.iloc[-2]
-        current_ema = ema_filter.iloc[-1]
-        current_price = closes.iloc[-1]
-        
-        if pd.isna(current_ha_rsi) or pd.isna(current_ema):
+
+        closes = df["close"]
+        macd_line, macd_signal = self._calculate_macd(closes)
+        rsi = self.rsi_wilder(closes, self.rsi_period)
+        rsi_signal = self.sma(rsi, self.rsi_signal)
+
+        macd_prev = macd_line.iloc[-2]
+        macd_curr = macd_line.iloc[-1]
+        macd_sig_prev = macd_signal.iloc[-2]
+        macd_sig_curr = macd_signal.iloc[-1]
+
+        rsi_prev = rsi.iloc[-2]
+        rsi_curr = rsi.iloc[-1]
+        rsi_sig_prev = rsi_signal.iloc[-2]
+        rsi_sig_curr = rsi_signal.iloc[-1]
+
+        if (
+            pd.isna(macd_prev)
+            or pd.isna(macd_curr)
+            or pd.isna(macd_sig_prev)
+            or pd.isna(macd_sig_curr)
+            or pd.isna(rsi_prev)
+            or pd.isna(rsi_curr)
+            or pd.isna(rsi_sig_prev)
+            or pd.isna(rsi_sig_curr)
+        ):
             return None
-        
-        # Detectar mudança de tendência
-        # Linha de 50 como divisor
-        cross_up = prev_ha_rsi <= 50 and current_ha_rsi > 50
-        cross_down = prev_ha_rsi >= 50 and current_ha_rsi < 50
-        
-        # Filtro de tendência com EMA
-        price_above_ema = current_price > current_ema
-        price_below_ema = current_price < current_ema
-        
-        if cross_up and price_above_ema:
+
+        macd_cross_up = macd_prev <= macd_sig_prev and macd_curr > macd_sig_curr
+        macd_cross_down = macd_prev >= macd_sig_prev and macd_curr < macd_sig_curr
+        rsi_cross_up = rsi_prev <= rsi_sig_prev and rsi_curr > rsi_sig_curr
+        rsi_cross_down = rsi_prev >= rsi_sig_prev and rsi_curr < rsi_sig_curr
+
+        if macd_cross_up and rsi_cross_up:
             return SignalResult(
                 symbol=symbol,
                 timeframe=timeframe,
                 strategy=self.name,
                 direction="LONG",
-                price=current_price,
-                message=f"🟢 SWING TRADE LONG: HA-RSI cruzou 50, preço acima EMA{self.ema_filter}",
-                rsi=current_ha_rsi,
-                ema50=current_ema
+                price=closes.iloc[-1],
+                message="SWING TRADE LONG: cruzamento RSI + MACD",
+                rsi=rsi_curr,
+                macd=macd_curr,
+                macd_signal=macd_sig_curr,
             )
-        
-        if cross_down and price_below_ema:
+
+        if macd_cross_down and rsi_cross_down:
             return SignalResult(
                 symbol=symbol,
                 timeframe=timeframe,
                 strategy=self.name,
                 direction="SHORT",
-                price=current_price,
-                message=f"🔴 SWING TRADE SHORT: HA-RSI cruzou 50, preço abaixo EMA{self.ema_filter}",
-                rsi=current_ha_rsi,
-                ema50=current_ema
+                price=closes.iloc[-1],
+                message="SWING TRADE SHORT: cruzamento RSI + MACD",
+                rsi=rsi_curr,
+                macd=macd_curr,
+                macd_signal=macd_sig_curr,
             )
-        
+
         return None

@@ -21,14 +21,12 @@ STRATEGY_TIMEFRAMES_FILE = CONFIG_DIR / "strategy_timeframes.json"
 
 # Timeframes padrão por estratégia
 DEFAULT_STRATEGY_TIMEFRAMES = {
-    "GCM": ["15m", "1h", "4h"],
-    "RSI": ["15m", "1h", "4h"],
-    "MACD": ["15m", "1h", "4h"],
-    "RSI_EMA50": ["1h", "4h"],
-    "SCALPING": ["3m", "5m"],
-    "SWING_TRADE": ["4h", "1d"],
-    "DAY_TRADE": ["15m", "1h"],
-    "JFN": ["15m", "1h", "4h"],
+    "DAY_TRADE": ["1h"],
+    "REVERSAO_DAY_TRADE": ["1h"],
+    "SWING_TRADE": ["1d"],
+    "SCALPING": ["3m"],
+    "BTC_PRO": ["15m"],
+    "DAY_TRADE_PRO": ["15m"],
 }
 
 
@@ -68,7 +66,7 @@ async def get_current_config():
     return {
         "strategies": {
             "active": settings.strategies_list,
-            "available": ["RSI", "MACD", "GCM", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE", "JFN"],
+            "available": ["DAY_TRADE", "REVERSAO_DAY_TRADE", "SWING_TRADE", "SCALPING", "BTC_PRO", "DAY_TRADE_PRO"],
             "timeframes": strategy_timeframes
         },
         "strategy_params": signal_engine.get_strategy_params(),

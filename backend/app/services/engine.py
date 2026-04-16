@@ -18,7 +18,7 @@ from app.strategies import (
     BaseStrategy, SignalResult,
     RSIStrategy, MACDStrategy, GCMStrategy,
     ScalpingStrategy, SwingTradeStrategy, DayTradeStrategy, RsiEma50Strategy,
-    JFNStrategy
+    JFNStrategy, ReversalDayTradeStrategy, BTCProStrategy, DayTradeProStrategy
 )
 
 logger = logging.getLogger(__name__)
@@ -28,15 +28,26 @@ CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 STRATEGY_TIMEFRAMES_FILE = os.path.join(CONFIG_DIR, "strategy_timeframes.json")
 
 DEFAULT_STRATEGY_TIMEFRAMES = {
+    "DAY_TRADE": ["1h"],
+    "REVERSAO_DAY_TRADE": ["1h"],
+    "SWING_TRADE": ["1d"],
+    "SCALPING": ["3m"],
+    "BTC_PRO": ["15m"],
+    "DAY_TRADE_PRO": ["15m"],
     "GCM": ["1h"],
     "RSI": ["1h"],
     "MACD": ["1h"],
     "RSI_EMA50": ["1h"],
-    "SCALPING": ["3m", "5m"],
-    "SWING_TRADE": ["1d"],
-    "DAY_TRADE": ["15m"],
     "JFN": ["1h"]
 }
+
+TOP30_MARKETCAP_SYMBOLS = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT", "LINKUSDT", "AVAXUSDT",
+    "SUIUSDT", "SHIBUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "HBARUSDT", "XLMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT",
+    "PEPEUSDT", "ICPUSDT", "ETCUSDT", "FILUSDT", "ATOMUSDT", "OPUSDT", "ARBUSDT", "INJUSDT", "VETUSDT", "RENDERUSDT"
+]
+
+TOP20_MARKETCAP_SET = set(TOP30_MARKETCAP_SYMBOLS[:20])
 
 
 class SignalEngine:
@@ -88,6 +99,37 @@ class SignalEngine:
         settings = self.settings
         
         self.strategies = {
+            "DAY_TRADE": DayTradeStrategy(ema_period=50),
+            "REVERSAO_DAY_TRADE": ReversalDayTradeStrategy(
+                rsi_period=settings.rsi_period,
+                rsi_signal=settings.rsi_signal,
+                rsi_overbought=settings.rsi_overbought,
+                rsi_oversold=settings.rsi_oversold,
+                harsi_length=settings.harsi_len,
+                harsi_smooth=settings.harsi_smooth,
+            ),
+            "SWING_TRADE": SwingTradeStrategy(
+                macd_fast=settings.macd_fast,
+                macd_slow=settings.macd_slow,
+                macd_signal=settings.macd_signal,
+                rsi_period=settings.rsi_period,
+                rsi_signal=settings.rsi_signal,
+            ),
+            "SCALPING": ScalpingStrategy(
+                harsi_length=settings.harsi_len,
+                harsi_smooth=settings.harsi_smooth,
+            ),
+            "BTC_PRO": BTCProStrategy(
+                period=settings.rsi_period,
+                signal_period=settings.rsi_signal,
+                overbought=settings.rsi_overbought,
+                oversold=settings.rsi_oversold,
+                use_ema_filter=False,
+            ),
+            "DAY_TRADE_PRO": DayTradeProStrategy(
+                harsi_length=settings.harsi_len,
+                harsi_smooth=settings.harsi_smooth,
+            ),
             "RSI": RSIStrategy(
                 period=settings.rsi_period,
                 signal_period=settings.rsi_signal,
@@ -103,22 +145,6 @@ class SignalEngine:
                 harsi_length=settings.harsi_len,
                 harsi_smooth=settings.harsi_smooth
             ),
-            "SCALPING": ScalpingStrategy(
-                ema_fast=settings.scalping_ema_fast,
-                ema_slow=settings.scalping_ema_slow,
-                rsi_period=settings.rsi_period
-            ),
-            "SWING_TRADE": SwingTradeStrategy(
-                harsi_len=settings.harsi_len,
-                harsi_smooth=settings.harsi_smooth
-            ),
-            "DAY_TRADE": DayTradeStrategy(
-                macd_fast=settings.macd_fast,
-                macd_slow=settings.macd_slow,
-                macd_signal=settings.macd_signal,
-                rsi_period=settings.rsi_period,
-                confirm_window=settings.confirm_window
-            ),
             "RSI_EMA50": RsiEma50Strategy(
                 rsi_period=settings.rsi_period,
                 rsi_signal=settings.rsi_signal,
@@ -126,7 +152,7 @@ class SignalEngine:
                 rsi_oversold=settings.rsi_oversold,
                 ema_period=50
             ),
-            "JFN": JFNStrategy()
+            "JFN": JFNStrategy(),
         }
         
         # Configurar Telegram
@@ -179,6 +205,12 @@ class SignalEngine:
                     self.strategies[strategy_name] = SwingTradeStrategy(**current_params)
                 elif strategy_name == "DAY_TRADE":
                     self.strategies[strategy_name] = DayTradeStrategy(**current_params)
+                elif strategy_name == "REVERSAO_DAY_TRADE":
+                    self.strategies[strategy_name] = ReversalDayTradeStrategy(**current_params)
+                elif strategy_name == "BTC_PRO":
+                    self.strategies[strategy_name] = BTCProStrategy(**current_params)
+                elif strategy_name == "DAY_TRADE_PRO":
+                    self.strategies[strategy_name] = DayTradeProStrategy(**current_params)
                 elif strategy_name == "RSI_EMA50":
                     self.strategies[strategy_name] = RsiEma50Strategy(**current_params)
                 elif strategy_name == "JFN":
@@ -233,6 +265,14 @@ class SignalEngine:
         if strategy_name in self.strategy_timeframes:
             return self.strategy_timeframes[strategy_name]
         return self.settings.timeframes_list
+
+    def get_symbols_for_strategy(self, strategy_name: str, symbols: List[str]) -> List[str]:
+        """Aplica filtros de simbolos por estrategia."""
+        if strategy_name == "BTC_PRO":
+            return [s for s in symbols if s.upper() == "BTCUSDT"]
+        if strategy_name == "DAY_TRADE_PRO":
+            return [s for s in symbols if s.upper() in TOP20_MARKETCAP_SET]
+        return symbols
     
     def add_signal_callback(self, callback: Callable):
         """Adiciona callback para receber sinais"""
@@ -443,9 +483,17 @@ class SignalEngine:
             if not strategies_for_tf:
                 continue
             
-            # Buscar dados para todos os símbolos
+            symbol_pool = set()
+            for strategy in strategies_for_tf:
+                symbol_pool.update(self.get_symbols_for_strategy(strategy, symbols))
+
+            filtered_symbols = [s for s in symbols if s in symbol_pool]
+            if not filtered_symbols:
+                continue
+
+            # Buscar dados para todos os símbolos necessários neste timeframe
             data = await exchange_service.fetch_multiple_ohlcv(
-                symbols,
+                filtered_symbols,
                 timeframe,
                 limit=self.settings.chunk_size
             )
@@ -454,8 +502,16 @@ class SignalEngine:
                 if df.empty:
                     continue
                 
+                symbol_strategies = [
+                    s for s in strategies_for_tf
+                    if symbol in self.get_symbols_for_strategy(s, [symbol])
+                ]
+
+                if not symbol_strategies:
+                    continue
+
                 signals = await self.analyze_symbol(
-                    symbol, timeframe, df, strategies_for_tf
+                    symbol, timeframe, df, symbol_strategies
                 )
                 
                 for signal in signals:

@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     binance_secret: str = ""
     
     # Strategy Settings (como JSON strings no .env)
-    active_strategies: str = '["GCM", "RSI", "MACD", "RSI_EMA50", "SCALPING", "SWING_TRADE", "DAY_TRADE", "JFN"]'
-    timeframes: str = '["3m", "5m", "15m", "1h", "4h"]'
-    symbols: str = '["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT", "MATICUSDT", "LTCUSDT"]'
+    active_strategies: str = '["DAY_TRADE", "REVERSAO_DAY_TRADE", "SWING_TRADE", "SCALPING", "BTC_PRO", "DAY_TRADE_PRO"]'
+    timeframes: str = '["3m", "15m", "1h", "1d"]'
+    symbols: str = '["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "TRXUSDT", "LINKUSDT", "AVAXUSDT", "SUIUSDT", "SHIBUSDT", "DOTUSDT", "LTCUSDT", "BCHUSDT", "HBARUSDT", "XLMUSDT", "UNIUSDT", "NEARUSDT", "APTUSDT", "PEPEUSDT", "ICPUSDT", "ETCUSDT", "FILUSDT", "ATOMUSDT", "OPUSDT", "ARBUSDT", "INJUSDT", "VETUSDT", "RENDERUSDT"]'
     
     # RSI
     rsi_period: int = 14
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     worker_interval_seconds: int = 60
     
     # CryptoBubbles
-    use_cryptobubbles: bool = True  # Usar CryptoBubbles para capturar pares dinâmicos
+    use_cryptobubbles: bool = False  # Usar lista fixa de symbols por padrao
     cryptobubbles_top_limit: int = 100  # Quantidade de pares com maior variação
     cryptobubbles_exclude_stablecoins: bool = True
     cryptobubbles_min_volume: float = 0  # Volume mínimo em USD

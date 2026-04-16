@@ -4,14 +4,12 @@ import { useSignalStore } from '@/lib/store';
 
 const TIMEFRAMES = ['3m', '5m', '15m', '30m', '1h', '4h', '1d'];
 const STRATEGIES = [
-  { id: 'RSI', label: 'RSI' },
-  { id: 'MACD', label: 'MACD' },
-  { id: 'GCM', label: 'GCM' },
-  { id: 'RSI_EMA50', label: 'RSI EMA50' },
-  { id: 'SCALPING', label: 'SCALPING' },
-  { id: 'SWING_TRADE', label: 'SWING TRADE' },
   { id: 'DAY_TRADE', label: 'DAY TRADE' },
-  { id: 'JFN', label: 'JFN' },
+  { id: 'REVERSAO_DAY_TRADE', label: 'REVERSAO DAY TRADE' },
+  { id: 'SWING_TRADE', label: 'SWING TRADE' },
+  { id: 'SCALPING', label: 'SCALPING' },
+  { id: 'BTC_PRO', label: 'BTC PRO' },
+  { id: 'DAY_TRADE_PRO', label: 'DAY TRADE PRO' },
 ];
 
 export function Header({ onLogout }: { onLogout?: () => void }) {

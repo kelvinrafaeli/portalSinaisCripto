@@ -7,38 +7,32 @@ import { TelegramConfig } from './TelegramConfig';
 
 // Estratégias disponíveis com seus nomes de exibição
 const STRATEGIES = [
-  { id: 'GCM', label: 'GCM', description: 'HA-RSI (Heikin Ashi RSI) com cruzamento de 50 e filtro de tendencia' },
-  { id: 'RSI', label: 'RSI', description: 'RSI Wilder cruzando niveis de sobrecompra/sobrevenda' },
-  { id: 'MACD', label: 'MACD', description: 'Linha MACD cruzando signal com confirmacao direcional' },
-  { id: 'RSI_EMA50', label: 'RSI + EMA50', description: 'RSI com filtro de tendencia pela EMA50' },
-  { id: 'SCALPING', label: 'Scalping', description: 'EMA9/EMA50 crossover com confirmacao RSI >/< 50' },
-  { id: 'SWING_TRADE', label: 'Swing Trade', description: 'HA-RSI cruzando 50 com filtro EMA100' },
-  { id: 'DAY_TRADE', label: 'Day Trade', description: 'Confluencia de cruzamentos MACD e RSI dentro de janela' },
-  { id: 'JFN', label: 'JFN', description: 'EMA20/EMA50 crossover com filtro de assertividade por simulacao' },
+  { id: 'DAY_TRADE', label: 'Day Trade', description: 'Cruzamento do preco com EMA50 (1H)' },
+  { id: 'REVERSAO_DAY_TRADE', label: 'Reversao Day Trade', description: 'RSI extremo + confirmacao GCM (1H)' },
+  { id: 'SWING_TRADE', label: 'Swing Trade', description: 'Confluencia de cruzamento RSI + MACD (1D)' },
+  { id: 'SCALPING', label: 'Scalping', description: 'GCM com sinais apenas em zonas extremas (3m)' },
+  { id: 'BTC_PRO', label: 'BTC PRO', description: 'RSI crossover exclusivo para BTC (15m)' },
+  { id: 'DAY_TRADE_PRO', label: 'Day Trade PRO', description: 'GCM extremo nas 20 maiores moedas (15m)' },
 ];
 const TIMEFRAMES = ['3m', '5m', '15m', '30m', '1h', '4h', '1d'];
 
 // Timeframes padrão por estratégia
 const DEFAULT_STRATEGY_TIMEFRAMES: Record<string, string[]> = {
-  'GCM': ['1h'],
-  'RSI': ['1h'],
-  'MACD': ['1h'],
-  'RSI_EMA50': ['1h'],
-  'SCALPING': ['3m', '5m'],
+  'DAY_TRADE': ['1h'],
+  'REVERSAO_DAY_TRADE': ['1h'],
   'SWING_TRADE': ['1d'],
-  'DAY_TRADE': ['15m'],
-  'JFN': ['1h'],
+  'SCALPING': ['3m'],
+  'BTC_PRO': ['15m'],
+  'DAY_TRADE_PRO': ['15m'],
 };
 
 const DEFAULT_STRATEGY_PARAMS: Record<string, Record<string, number | boolean>> = {
-  RSI: { period: 14, signal_period: 9, overbought: 70, oversold: 30, use_ema_filter: true },
-  MACD: { fast_period: 12, slow_period: 26, signal_period: 9 },
-  GCM: { harsi_length: 10, harsi_smooth: 5, rsi_length: 7, rsi_mode: true, rsi_buy_level: -20, rsi_sell_level: 20 },
-  RSI_EMA50: { rsi_period: 14, rsi_signal: 9, ema_period: 50, rsi_overbought: 80, rsi_oversold: 20 },
-  SCALPING: { ema_fast: 9, ema_slow: 50, rsi_period: 14, rsi_neutral: 50 },
-  SWING_TRADE: { harsi_len: 14, harsi_smooth: 7, ema_filter: 100 },
-  DAY_TRADE: { macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_period: 14, rsi_ma_period: 9, confirm_window: 6 },
-  JFN: { fast_length: 20, slow_length: 50 },
+  DAY_TRADE: { ema_period: 50 },
+  REVERSAO_DAY_TRADE: { rsi_period: 14, rsi_signal: 9, rsi_overbought: 80, rsi_oversold: 20, harsi_length: 10, harsi_smooth: 5 },
+  SWING_TRADE: { macd_fast: 12, macd_slow: 26, macd_signal: 9, rsi_period: 14, rsi_signal: 9 },
+  SCALPING: { harsi_length: 10, harsi_smooth: 5, rsi_length: 7, rsi_mode: true, rsi_buy_level: -25, rsi_sell_level: 25 },
+  BTC_PRO: { period: 14, signal_period: 9, overbought: 80, oversold: 20, use_ema_filter: false },
+  DAY_TRADE_PRO: { harsi_length: 10, harsi_smooth: 5, rsi_length: 7, rsi_mode: true, rsi_buy_level: -25, rsi_sell_level: 25 },
 };
 
 export function Sidebar() {
@@ -367,38 +361,38 @@ export function Sidebar() {
         return (
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">EMA Fast</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">HARSI Len</label>
               <input
                 type="number"
-                value={Number(params.ema_fast)}
-                onChange={(e) => updateStrategyParam('SCALPING', 'ema_fast', Number(e.target.value))}
+                value={Number(params.harsi_length)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'harsi_length', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">EMA Slow</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">Smooth</label>
               <input
                 type="number"
-                value={Number(params.ema_slow)}
-                onChange={(e) => updateStrategyParam('SCALPING', 'ema_slow', Number(e.target.value))}
+                value={Number(params.harsi_smooth)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'harsi_smooth', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">Buy Level</label>
               <input
                 type="number"
-                value={Number(params.rsi_period)}
-                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_period', Number(e.target.value))}
+                value={Number(params.rsi_buy_level)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_buy_level', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">RSI Neutro</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">Sell Level</label>
               <input
                 type="number"
-                value={Number(params.rsi_neutral)}
-                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_neutral', Number(e.target.value))}
+                value={Number(params.rsi_sell_level)}
+                onChange={(e) => updateStrategyParam('SCALPING', 'rsi_sell_level', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
@@ -408,43 +402,11 @@ export function Sidebar() {
         return (
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">HARSI Len</label>
-              <input
-                type="number"
-                value={Number(params.harsi_len)}
-                onChange={(e) => updateStrategyParam('SWING_TRADE', 'harsi_len', Number(e.target.value))}
-                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">Smooth</label>
-              <input
-                type="number"
-                value={Number(params.harsi_smooth)}
-                onChange={(e) => updateStrategyParam('SWING_TRADE', 'harsi_smooth', Number(e.target.value))}
-                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">EMA</label>
-              <input
-                type="number"
-                value={Number(params.ema_filter)}
-                onChange={(e) => updateStrategyParam('SWING_TRADE', 'ema_filter', Number(e.target.value))}
-                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
-              />
-            </div>
-          </div>
-        );
-      case 'DAY_TRADE':
-        return (
-          <div className="grid grid-cols-3 gap-2">
-            <div>
               <label className="text-[10px] text-foreground-muted block mb-1">MACD Fast</label>
               <input
                 type="number"
                 value={Number(params.macd_fast)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_fast', Number(e.target.value))}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'macd_fast', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
@@ -453,7 +415,7 @@ export function Sidebar() {
               <input
                 type="number"
                 value={Number(params.macd_slow)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_slow', Number(e.target.value))}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'macd_slow', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
@@ -462,34 +424,90 @@ export function Sidebar() {
               <input
                 type="number"
                 value={Number(params.macd_signal)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'macd_signal', Number(e.target.value))}
+                onChange={(e) => updateStrategyParam('SWING_TRADE', 'macd_signal', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'DAY_TRADE':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">EMA Periodo</label>
+              <input
+                type="number"
+                value={Number(params.ema_period)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE', 'ema_period', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'REVERSAO_DAY_TRADE':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI Overbought</label>
+              <input
+                type="number"
+                value={Number(params.rsi_overbought)}
+                onChange={(e) => updateStrategyParam('REVERSAO_DAY_TRADE', 'rsi_overbought', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">RSI</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">RSI Oversold</label>
               <input
                 type="number"
-                value={Number(params.rsi_period)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'rsi_period', Number(e.target.value))}
+                value={Number(params.rsi_oversold)}
+                onChange={(e) => updateStrategyParam('REVERSAO_DAY_TRADE', 'rsi_oversold', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'BTC_PRO':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Overbought</label>
+              <input
+                type="number"
+                value={Number(params.overbought)}
+                onChange={(e) => updateStrategyParam('BTC_PRO', 'overbought', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">RSI MA</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">Oversold</label>
               <input
                 type="number"
-                value={Number(params.rsi_ma_period)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'rsi_ma_period', Number(e.target.value))}
+                value={Number(params.oversold)}
+                onChange={(e) => updateStrategyParam('BTC_PRO', 'oversold', Number(e.target.value))}
+                className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
+              />
+            </div>
+          </div>
+        );
+      case 'DAY_TRADE_PRO':
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-foreground-muted block mb-1">Buy Level</label>
+              <input
+                type="number"
+                value={Number(params.rsi_buy_level)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE_PRO', 'rsi_buy_level', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
             <div>
-              <label className="text-[10px] text-foreground-muted block mb-1">Janela</label>
+              <label className="text-[10px] text-foreground-muted block mb-1">Sell Level</label>
               <input
                 type="number"
-                value={Number(params.confirm_window)}
-                onChange={(e) => updateStrategyParam('DAY_TRADE', 'confirm_window', Number(e.target.value))}
+                value={Number(params.rsi_sell_level)}
+                onChange={(e) => updateStrategyParam('DAY_TRADE_PRO', 'rsi_sell_level', Number(e.target.value))}
                 className="w-full bg-background-secondary border border-border rounded px-2 py-1 text-xs text-foreground"
               />
             </div>
